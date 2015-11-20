@@ -11,8 +11,6 @@
 // See the License for the specific language governing permissions and limitations under the License.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections;
 using System.Collections.Generic;
 
 namespace behaviac
@@ -21,7 +19,8 @@ namespace behaviac
     {
         public Assignment()
         {
-		}
+        }
+
         ~Assignment()
         {
             m_opl = null;
@@ -33,33 +32,67 @@ namespace behaviac
         {
             base.load(version, agentType, properties);
 
-            string propertyName = null;
-
-            foreach (property_t p in properties)
+            foreach(property_t p in properties)
             {
                 if (p.name == "Opl")
                 {
-                    this.m_opl = Condition.LoadLeft(p.value, ref propertyName, null);
+                    this.m_opl = Condition.LoadLeft(p.value);
+
                 }
                 else if (p.name == "Opr")
                 {
                     int pParenthesis = p.value.IndexOf('(');
+
                     if (pParenthesis == -1)
                     {
                         string typeName = null;
-                        this.m_opr = Condition.LoadRight(p.value, propertyName, ref typeName);
+                        this.m_opr = Condition.LoadRight(p.value, ref typeName);
+
                     }
                     else
                     {
                         //method
                         this.m_opr_m = Action.LoadMethod(p.value);
                     }
+
                 }
                 else
                 {
                     //Debug.Check(0, "unrecognised property %s", p.name);
                 }
             }
+        }
+
+        public static bool EvaluteAssignment(Agent pAgent, Property opl, Property opr, behaviac.CMethodBase opr_m)
+        {
+            bool bValid = false;
+
+            if (opr_m != null)
+            {
+                object returnValue = opr_m.Invoke(pAgent);
+
+                Agent pParentOpl = opl.GetParentAgent(pAgent);
+                opl.SetValue(pParentOpl, returnValue);
+
+                bValid = true;
+
+            }
+            else if (opr != null && opl != null)
+            {
+                Agent pParentL = opl.GetParentAgent(pAgent);
+                Agent pParentR = opr.GetParentAgent(pAgent);
+
+                opl.SetFrom(pParentR, opr, pParentL);
+
+                bValid = true;
+
+            }
+            else
+            {
+                //Debug.Check(false);
+            }
+
+            return bValid;
         }
 
         public override bool IsValid(Agent pAgent, BehaviorTask pTask)
@@ -81,14 +114,13 @@ namespace behaviac
         protected Property m_opr;
         protected CMethodBase m_opr_m;
 
-        class AssignmentTask : LeafTask
+        private class AssignmentTask : LeafTask
         {
             public AssignmentTask()
             { }
 
             ~AssignmentTask()
             {
-
             }
 
             public override void copyto(BehaviorTask target)
@@ -100,83 +132,32 @@ namespace behaviac
             {
                 base.save(node);
             }
+
             public override void load(ISerializableNode node)
             {
                 base.load(node);
-            }
-
-            protected override bool isContinueTicking()
-            {
-                return false;
             }
 
             protected override bool onenter(Agent pAgent)
             {
                 return true;
             }
+
             protected override void onexit(Agent pAgent, EBTStatus s)
             {
             }
 
             protected override EBTStatus update(Agent pAgent, EBTStatus childStatus)
             {
-                EBTStatus result = EBTStatus.BT_SUCCESS;
+                Debug.Check(childStatus == EBTStatus.BT_RUNNING);
 
                 Debug.Check(this.GetNode() is Assignment);
                 Assignment pAssignmentNode = (Assignment)(this.GetNode());
 
-                if (pAssignmentNode.m_opr_m != null)
-                {
-                    ParentType pt = pAssignmentNode.m_opr_m.GetParentType();
-                    Agent pParent = pAgent;
-                    if (pt == ParentType.PT_INSTANCE)
-                    {
-                        pParent = Agent.GetInstance(pAssignmentNode.m_opr_m.GetInstanceNameString(), pParent.GetContextId());
-						Debug.Check(pParent != null || Utils.IsStaticClass(pAssignmentNode.m_opr_m.GetInstanceNameString()));
-                    }
+                EBTStatus result = EBTStatus.BT_SUCCESS;
+                bool bValid = Assignment.EvaluteAssignment(pAgent, pAssignmentNode.m_opl, pAssignmentNode.m_opr, pAssignmentNode.m_opr_m);
 
-                    object returnValue = pAssignmentNode.m_opr_m.run(pParent, pAgent);
-
-                    ParentType pt_opl = pAssignmentNode.m_opl.GetParentType();
-                    Agent pParentOpl = pAgent;
-                    if (pt_opl == ParentType.PT_INSTANCE)
-                    {
-                        pParentOpl = Agent.GetInstance(pAssignmentNode.m_opl.GetInstanceNameString(), pParentOpl.GetContextId());
-						Debug.Check(pParentOpl != null || Utils.IsStaticClass(pAssignmentNode.m_opl.GetInstanceNameString()));
-                    }
-
-                    pAssignmentNode.m_opl.SetValue(pParentOpl, returnValue);
-                }
-                else if (pAssignmentNode.m_opr != null && pAssignmentNode.m_opl != null)
-                {
-                    Agent pParentL = pAgent;
-                    Agent pParentR = pAgent;
-
-                    {
-                        ParentType pt = pAssignmentNode.m_opl.GetParentType();
-                        if (pt == ParentType.PT_INSTANCE)
-                        {
-                            pParentL = Agent.GetInstance(pAssignmentNode.m_opl.GetInstanceNameString(), pParentL.GetContextId());
-							Debug.Check(pParentL != null || Utils.IsStaticClass(pAssignmentNode.m_opl.GetInstanceNameString()));
-                        }
-                    }
-                    {
-                        ParentType pt = pAssignmentNode.m_opr.GetParentType();
-                        if (pt == ParentType.PT_INSTANCE)
-                        {
-                            pParentR = Agent.GetInstance(pAssignmentNode.m_opr.GetInstanceNameString(), pParentR.GetContextId());
-
-                            //it is a const
-                            if (pParentR == null)
-                            {
-                                pParentR = pParentL;
-                            }
-                        }
-                    }
-
-                    pAssignmentNode.m_opl.SetFrom(pParentR, pAssignmentNode.m_opr, pParentL);
-                }
-                else
+                if (!bValid)
                 {
                     result = pAssignmentNode.update_impl(pAgent, childStatus);
                 }

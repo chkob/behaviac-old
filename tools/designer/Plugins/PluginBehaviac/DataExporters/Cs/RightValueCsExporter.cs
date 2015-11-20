@@ -55,7 +55,7 @@ namespace PluginBehaviac.DataExporters
             }
             else
             {
-                retStr = VariableCsExporter.GenerateCode(rightValue.Var, stream, indent, typename, var, caller);
+                retStr = VariableCsExporter.GenerateCode(rightValue.Var, false, stream, indent, typename, var, caller);
             }
 
             return retStr;

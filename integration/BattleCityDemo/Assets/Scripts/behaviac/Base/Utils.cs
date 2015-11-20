@@ -3,48 +3,48 @@
 //
 // Copyright (C) 2015 THL A29 Limited, a Tencent company. All rights reserved.
 //
-// Licensed under the BSD 3-Clause License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at http://opensource.org/licenses/BSD-3-Clause
+// Licensed under the BSD 3-Clause License (the "License"); you may not use this file except in
+// compliance with the License. You may obtain a copy of the License at http://opensource.org/licenses/BSD-3-Clause
 //
-// Unless required by applicable law or agreed to in writing, software distributed under the License is
-// distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and limitations under the License.
+// Unless required by applicable law or agreed to in writing, software distributed under the License
+// is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+// or implied. See the License for the specific language governing permissions and limitations under
+// the License.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #if !BEHAVIAC_RELEASE
-	#define BEHAVIAC_DEBUG
+#define BEHAVIAC_DEBUG
 #endif
 
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.IO;
 using System.ComponentModel;
-using System.Reflection;
 using System.Diagnostics;
-using UnityEngine;
+using System.IO;
+using System.Reflection;
 
 namespace behaviac
 {
     public struct CStringID
     {
-        uint m_id;
+        private uint m_id;
 
         public CStringID(string str)
         {
             //SetId(str);
-			m_id = CRC32.CalcCRC(str);
+            m_id = CRC32.CalcCRC(str);
         }
 
         public void SetId(string str)
         {
-			m_id = CRC32.CalcCRC(str);
+            m_id = CRC32.CalcCRC(str);
         }
 
-		public uint GetId()
-		{
-			return m_id;
-		}
+        public uint GetId()
+        {
+            return m_id;
+        }
 
         public override bool Equals(System.Object obj)
         {
@@ -55,7 +55,7 @@ namespace behaviac
             }
 
             // If parameter cannot be cast to Point return false.
-			CStringID p = (CStringID)obj;
+            CStringID p = (CStringID)obj;
 
             // Return true if the fields match:
             return (m_id == p.m_id);
@@ -109,46 +109,41 @@ namespace behaviac
     {
         public CPropertyNode(Agent agent, string className)
         {
-
         }
     }
 
     public class CMethodBase
     {
-        behaviac.MethodMetaInfoAttribute descAttrbute_;
+        private behaviac.MethodMetaInfoAttribute descAttrbute_;
         private System.Reflection.MethodBase method_;
 
         public CMethodBase(System.Reflection.MethodBase m, behaviac.MethodMetaInfoAttribute a, string methodNameOverride)
         {
             method_ = m;
             descAttrbute_ = a;
-            m_name = !string.IsNullOrEmpty(methodNameOverride) ? methodNameOverride : method_.Name;
-            m_id.SetId(m_name);
+            this.m_variableName = !string.IsNullOrEmpty(methodNameOverride) ? methodNameOverride : method_.Name;
+            m_id.SetId(this.m_variableName);
         }
 
         protected CMethodBase(CMethodBase copy)
         {
-            m_instanceName = copy.m_instanceName;
-            m_parentType = copy.m_parentType;
-            method_ = copy.method_;
-            descAttrbute_ = copy.descAttrbute_;
-            m_name = copy.m_name;
-            m_id = copy.m_id;
+            this.m_variableName = copy.m_variableName;
+            this.m_instanceName = copy.m_instanceName;
+            this.method_ = copy.method_;
+            this.descAttrbute_ = copy.descAttrbute_;
+            this.m_id = copy.m_id;
+            Debug.Check(copy.m_params == null);
         }
 
-        private string m_name;
+        protected string m_instanceName;
+        protected string m_variableName;
 
         public string Name
         {
             get
             {
-                return m_name;
+                return this.m_variableName;
             }
-        }
-
-        public ParentType GetParentType()
-        {
-            return m_parentType;
         }
 
         private CStringID m_id = new CStringID();
@@ -158,98 +153,160 @@ namespace behaviac
             return m_id;
         }
 
-        private string m_instanceName;
-
-        public string GetInstanceNameString()
+        public string InstanceName
         {
-            return m_instanceName;
-        }
-
-        private ParentType m_parentType = ParentType.PT_INVALID;
-
-        public void SetInstanceNameString(string agentInstanceName, ParentType pt)
-        {
-            this.m_instanceName = agentInstanceName;
-            this.m_parentType = pt;
-        }
-
-        public virtual Property CreateProperty(string defaultValue, bool bConst)
-        {
-            Property p = Property.Create(defaultValue, null, bConst);
-            return p;
-        }
-
-        public void Load(Agent parent, List<string> paramsToken)
-        {
-            System.Reflection.ParameterInfo[] parameters = method_.GetParameters();
-
-            //
-            this.m_param_values = new object[parameters.Length];
-
-            if (paramsToken.Count == parameters.Length)
+            get
             {
-                this.m_params = new Param_t[parameters.Length];
+                return this.m_instanceName;
+            }
+            set
+            {
+                this.m_instanceName = value;
+            }
+        }
+
+        public virtual int ParamsCount
+        {
+            get
+            {
+                return this.method_ != null ? this.method_.GetParameters().Length : 0;
+            }
+        }
+
+        public virtual List<Type> ParamTypes
+        {
+            get
+            {
+                List<Type> paramTypes = null;
+
+                if (this.method_ != null)
+                {
+                    System.Reflection.ParameterInfo[] parameters = this.method_.GetParameters();
+                    int paramsCount = parameters.Length;
+                    paramTypes = new List<Type>();
+
+                    for (int i = 0; i < paramsCount; ++i)
+                    {
+                        paramTypes.Add(parameters[i].ParameterType);
+                    }
+
+                }
+                else
+                {
+                    int paramsCount = this.m_params.Length;
+
+                    for (int i = 0; i < paramsCount; ++i)
+                    {
+                        paramTypes.Add(this.m_params[i].paramProperty.PropertyType);
+                    }
+                }
+
+                return paramTypes;
+            }
+        }
+
+        public Agent GetParentAgent(Agent pAgent)
+        {
+            Agent pParent = pAgent;
+
+            if (!string.IsNullOrEmpty(this.m_instanceName) && this.m_instanceName != "Self")
+            {
+                pParent = Agent.GetInstance(this.m_instanceName, pParent.GetContextId());
+                Debug.Check(pParent != null || Utils.IsStaticClass(this.m_instanceName));
+            }
+
+            return pParent;
+        }
+
+        public static Param_t[] LoadParams(List<string> paramsToken, List<Type> parameters, ref object[] _params_value)
+        {
+            int paramCount = parameters != null ? parameters.Count : paramsToken.Count;
+            Param_t[] _params = null;
+
+            if (paramCount > 0)
+            {
+                _params = new Param_t[paramCount];
+                _params_value = new object[paramCount];
 
                 for (int i = 0; i < paramsToken.Count; ++i)
                 {
-                    System.Reflection.ParameterInfo para = parameters[i];
-
-                    bool isStruct = paramsToken[i][0] == '{';
-
-                    if (isStruct)
+                    if (parameters != null)
                     {
-                        Dictionary<string, Property> props = new Dictionary<string, Property>();
-                        string strT = "";
-                        if (StringUtils.ParseForStruct(para.ParameterType, paramsToken[i], ref strT, props))
-                        {
-                            object paramValue = StringUtils.FromString(para.ParameterType, strT, false);
-                            this.m_param_values[i] = paramValue;
+                        Type paramType = parameters[i];
 
-                            this.m_params[i].paramStructMembers = props;
-                        }
-                    }
-                    else
-                    {
-                        //paramsToken[i][0] = '"', then it is a string
-                        bool isString = paramsToken[i][0] == '"';
-                        if (isString || paramsToken[i].IndexOf(' ') == -1)
-                        {
-                            //" is paired
-                            Debug.Check(!isString || paramsToken[i][paramsToken[i].Length - 1] == '"');
-                            string paramStr = isString ? paramsToken[i].Substring(1, paramsToken[i].Length - 2) : paramsToken[i];
+                        bool isStruct = paramsToken[i][0] == '{';
 
-                            object paramValue = StringUtils.FromString(para.ParameterType, paramStr, false);
-                            this.m_param_values[i] = paramValue;
+                        if (isStruct)
+                        {
+                            Dictionary<string, Property> props = new Dictionary<string, Property>();
+                            string strT = "";
+
+                            if (StringUtils.ParseForStruct(paramType, paramsToken[i], ref strT, props))
+                            {
+                                object paramValue = StringUtils.FromString(paramType, strT, false);
+
+                                _params_value[i] = paramValue;
+                                _params[i].paramStructMembers = props;
+                            }
+
                         }
                         else
                         {
-                            string[] tokens = paramsToken[i].Split(' ');
-                            if (tokens.Length == 2)
+                            //paramsToken[i][0] = '"', then it is a string
+                            bool isString = paramsToken[i][0] == '"';
+
+                            if (isString || paramsToken[i].IndexOf(' ') == -1)
                             {
-                                //int AgentTest::Property1
-                                string typeName = tokens[0].Replace("::", ".");
-                                Property paramProperty = Property.Create(typeName, tokens[1], null, false, false);
-                                this.m_params[i].paramProperty = paramProperty;
-                            }
-                            else if (tokens.Length == 3)
-                            {
-                                //static int AgentTest::Property6
-                                Debug.Check(tokens[0] == "static");
-                                string typeName = tokens[1].Replace("::", ".");
-                                Property paramProperty = Property.Create(typeName, tokens[2], null, true, false);
-                                this.m_params[i].paramProperty = paramProperty;
+                                //" is paired
+                                Debug.Check(!isString || paramsToken[i][paramsToken[i].Length - 1] == '"');
+                                string paramStr = isString ? paramsToken[i].Substring(1, paramsToken[i].Length - 2) : paramsToken[i];
+
+                                object paramValue = StringUtils.FromString(paramType, paramStr, false);
+
+                                _params_value[i] = paramValue;
+
                             }
                             else
                             {
-                                Debug.Check(false);
+                                ParseMethodParamProperty(paramsToken[i], _params, i);
                             }
                         }
+
+                        _params[i].isRefOut = paramType.IsByRef;
+
                     }
-                }
+                    else
+                    {
+                        ParseMethodParamProperty(paramsToken[i], _params, i);
+                    }
+                }//end of for
             }
-            else
+
+            return _params;
+        }
+
+        private static void ParseMethodParamProperty(string paramToken, Param_t[] _params, int i)
+        {
+            string typeName = null;
+            Property paramProperty = Condition.ParseProperty(paramToken, ref typeName);
+            _params[i].paramProperty = paramProperty;
+        }
+
+        public void Load(List<string> paramsToken)
+        {
+            int paramsCount = this.ParamsCount;
+
+            if (paramsCount > 0)
             {
-                Debug.Check(false);
+                if (paramsToken.Count == paramsCount)
+                {
+                    this.m_params = LoadParams(paramsToken, this.ParamTypes, ref this.m_params_value);
+
+                }
+                else
+                {
+                    Debug.Check(false);
+                }
             }
         }
 
@@ -258,18 +315,8 @@ namespace behaviac
             return false;
         }
 
-        public string GetName()
+        public virtual string GetClassNameString()
         {
-            return this.m_name;
-        }
-
-        public string GetClassNameString()
-        {
-            if (this.IsNamedEvent())
-            {
-                return this.method_.DeclaringType.DeclaringType.FullName;
-            }
-
             return this.method_.DeclaringType.FullName;
         }
 
@@ -283,90 +330,155 @@ namespace behaviac
             return new CMethodBase(this);
         }
 
-        struct Param_t
+        public struct Param_t
         {
+            public bool isRefOut;
             public Property paramProperty;
             public Dictionary<string, Property> paramStructMembers;
         };
 
-        private object[] m_param_values = null;
-        private Param_t[] m_params = null;
+        protected Param_t[] m_params = null;
+        protected object[] m_params_value = null;
 
-        public object run(Agent parent, Agent parHolder)
+        public void GetParamsValue(Agent pAgent, bool bAllowNullValue)
         {
-            //if there is no params, Load was not called and this.m_param_values is null
-            //Debug.Check(this.m_param_values != null);
+            Agent pParent = this.GetParentAgent(pAgent);
 
-            if (this.m_params != null)
-            {
-                for (int i = 0; i < this.m_params.Length; ++i)
-                {
-                    Property property = this.m_params[i].paramProperty;
-                    if (property != null)
-                    {
-                        this.m_param_values[i] = property.GetValue(parent, parHolder);
-                    }
+            this.GetParamsValue(pParent, pAgent, bAllowNullValue);
+        }
 
-                    //Debug.Check(this.m_param_values[i] != null);
+        private object run(Agent parent, Agent pSelf)
+        {
+            this.GetParamsValue(parent, pSelf, true);
 
-                    if (this.m_params[i].paramStructMembers != null)
-                    {
-                        Type structType = this.m_param_values[i].GetType();
-                        Agent.CTagObjectDescriptor objectDesc = Agent.GetDescriptorByName(structType.FullName);
+            object returnValue = this.method_.Invoke(parent, this.m_params_value);
 
-                        foreach (KeyValuePair<string, Property> pair in this.m_params[i].paramStructMembers)
-                        {
-                            CMemberBase member = objectDesc.GetMember(pair.Key);
-
-                            object v = pair.Value.GetValue(parent, parHolder);
-
-                            member.Set(this.m_param_values[i], v);
-                        }
-                    }
-                }
-            }
-
-            object returnValue = this.method_.Invoke(parent, this.m_param_values);
-
-            if (this.m_params != null)
-            {
-                for (int i = 0; i < this.m_params.Length; ++i)
-                {
-                    Property property = this.m_params[i].paramProperty;
-                    if (property != null)
-                    {
-                        object value = this.m_param_values[i];
-						property.SetValue(parHolder, value);
-                    }
-
-                    if (this.m_params[i].paramStructMembers != null)
-                    {
-                        Type structType = this.m_param_values[i].GetType();
-                        Agent.CTagObjectDescriptor objectDesc = Agent.GetDescriptorByName(structType.FullName);
-
-                        foreach (KeyValuePair<string, Property> pair in this.m_params[i].paramStructMembers)
-                        {
-                            CMemberBase member = objectDesc.GetMember(pair.Key);
-                            object v = member.Get(this.m_param_values[i]);
-
-							pair.Value.SetValue(parHolder, v);
-                        }
-                    }
-                }
-            }
+            this.UpdateAgentValue(pSelf);
 
             return returnValue;
         }
 
-        public object run(Agent parent, Agent parHolder, object param)
+        private void UpdateAgentValue(Agent pSelf)
         {
-            Debug.Check(this.m_param_values != null && this.m_param_values.Length <= 1);
-            if (this.m_param_values.Length == 1)
+            if (this.m_params != null)
             {
-                this.m_param_values[0] = param;
+                for (int i = 0; i < this.m_params.Length; ++i)
+                {
+                    if (this.m_params[i].isRefOut)
+                    {
+                        Property property = this.m_params[i].paramProperty;
+
+                        if (property != null)
+                        {
+                            property.SetValue(pSelf, this.m_params_value[i]);
+                        }
+
+                        if (this.m_params[i].paramStructMembers != null)
+                        {
+                            Type structType = this.m_params_value[i].GetType();
+                            Agent.CTagObjectDescriptor objectDesc = Agent.GetDescriptorByName(structType.FullName);
+
+                            foreach(KeyValuePair<string, Property> pair in this.m_params[i].paramStructMembers)
+                            {
+                                CMemberBase member = objectDesc.GetMember(pair.Key);
+                                object v = member.Get(this.m_params_value[i]);
+
+                                pair.Value.SetValue(pSelf, v);
+                            }
+                        }
+                    }//end of if isRefOut
+                }
+            }
+        }
+
+        private void GetParamsValue(Agent parent, Agent pSelf, bool bAllowNullValue)
+        {
+            if (this.m_params != null)
+            {
+                Debug.Check(this.m_params_value != null && this.m_params_value.Length == this.m_params.Length);
+
+                for (int i = 0; i < this.m_params.Length; ++i)
+                {
+                    Property property = this.m_params[i].paramProperty;
+
+                    if (property != null)
+                    {
+                        object v = property.GetValue(parent, pSelf);
+
+                        if (this.m_params_value[i] == null || !this.m_params_value[i].GetType().IsValueType)
+                        {
+                            Utils.Clone(ref this.m_params_value[i], v);
+                        }
+                        else
+                        {
+                            this.m_params_value[i] = v;
+                        }
+
+                        Debug.Check(bAllowNullValue || this.m_params_value[i] != null);
+                    }
+
+                    //Debug.Check(this.m_this.m_params[i].value != null);
+
+                    if (this.m_params[i].paramStructMembers != null)
+                    {
+                        Type structType = this.m_params_value[i].GetType();
+                        Agent.CTagObjectDescriptor objectDesc = Agent.GetDescriptorByName(structType.FullName);
+
+                        foreach(KeyValuePair<string, Property> pair in this.m_params[i].paramStructMembers)
+                        {
+                            CMemberBase member = objectDesc.GetMember(pair.Key);
+
+                            object v = pair.Value.GetValue(parent, pSelf);
+
+                            member.Set(this.m_params_value[i], v);
+                        }
+                    }
+                }
+            }
+        }
+
+        public object Invoke(Agent pParent, Agent pAgent)
+        {
+            object returnValue = this.run(pParent, pAgent);
+
+            return returnValue;
+        }
+
+        public object Invoke(Agent pAgent)
+        {
+            Agent pParent = this.GetParentAgent(pAgent);
+
+            object returnValue = this.run(pParent, pAgent);
+
+            return returnValue;
+        }
+
+        public object Invoke(Agent pSelf, object param)
+        {
+            Agent pParent = this.GetParentAgent(pSelf);
+
+            Debug.Check(this.m_params_value.Length == 1);
+
+            this.m_params_value[0] = param;
+
+            object returnValue = this.method_.Invoke(pParent, this.m_params_value);
+            //this.UpdateAgentValue(pSelf);
+
+            return returnValue;
+        }
+
+        public object Invoke(Agent pSelf, object[] paramsValue)
+        {
+            Agent pParent = this.GetParentAgent(pSelf);
+
+            for (int i = 0; i < paramsValue.Length; ++i)
+            {
+                this.m_params_value[i] = paramsValue[i];
             }
 
-            object returnValue = this.method_.Invoke(parent, this.m_param_values);
+            object returnValue = this.method_.Invoke(pParent, this.m_params_value);
+
+            //this.UpdateAgentValue(pSelf);
 
             return returnValue;
         }
@@ -375,46 +487,42 @@ namespace behaviac
     public class CMemberBase
     {
         //behaviac.MemberMetaInfoAttribute descAttrbute_;
-        System.Reflection.FieldInfo field_;
+        protected string m_name;
 
-        public CMemberBase(System.Reflection.FieldInfo f, behaviac.MemberMetaInfoAttribute a)
+        public CMemberBase(string name, behaviac.MemberMetaInfoAttribute a)
         {
-            field_ = f;
-            //descAttrbute_ = a;
-            m_id.SetId(field_.Name);
+            m_name = name;
+            m_id.SetId(name);
 
-			if (a != null) 
-			{
-				m_range = a.Range;
-			} 
-			else 
-			{
-				m_range = 1.0f;
-			}
-        }
-
-        public Type MemberType
-        {
-            get
+            if (a != null)
             {
-                return field_.FieldType;
+                m_range = a.Range;
+
+            }
+            else
+            {
+                m_range = 1.0f;
             }
         }
 
-        public bool ISSTATIC()
+        public virtual Type MemberType
         {
-            return field_.IsStatic;
+            get
+            {
+                return null;
+            }
         }
 
-		private float m_range = 1.0f;
-		public float GetRange()
-		{
-			return this.m_range;
-		}
-
-        public ParentType GetParentType()
+        public virtual bool ISSTATIC()
         {
-            return ParentType.PT_INVALID;
+            return false;
+        }
+
+        private float m_range = 1.0f;
+
+        public float GetRange()
+        {
+            return this.m_range;
         }
 
         private CStringID m_id = new CStringID();
@@ -424,29 +532,34 @@ namespace behaviac
             return m_id;
         }
 
-        public string GetName()
+        public string Name
         {
-            return this.field_.Name;
+            get
+            {
+                return this.m_name;
+            }
         }
 
-        public string GetClassNameString()
+        public virtual string GetClassNameString()
         {
-            return this.field_.DeclaringType.FullName;
+            return null;
         }
 
         private string m_instaceName;
 
-        public string GetInstanceNameString()
+        public string InstanceName
         {
-            return m_instaceName;
+            get
+            {
+                return m_instaceName;
+            }
+            set
+            {
+                m_instaceName = value;
+            }
         }
 
-        public void SetInstanceNameString(string name)
-        {
-            m_instaceName = name;
-        }
-
-        public virtual Property CreateProperty(string defaultValue, bool bConst)
+        public Property CreateProperty(string defaultValue, bool bConst)
         {
             Property p = new Property(this, bConst);
 
@@ -463,11 +576,6 @@ namespace behaviac
             return 0;
         }
 
-        public virtual CMemberBase clone()
-        {
-            return null;
-        }
-
         public virtual void Load(Agent parent, ISerializableNode node)
         {
         }
@@ -478,30 +586,199 @@ namespace behaviac
 
         public virtual object Get(object agentFrom)
         {
-            if (this.ISSTATIC())
-            {
-                return field_.GetValue(null);
-            }
-            else
-            {
-                return field_.GetValue(agentFrom);
-            }
+            return null;
         }
 
-        public void Set(object objectFrom, object v)
+        public virtual void Set(object objectFrom, object v)
         {
-            field_.SetValue(objectFrom, v);
         }
     }
 
-    public class CNamedEvent : CMethodBase
+    public class CFieldInfo : CMemberBase
     {
-        public CNamedEvent(System.Reflection.MethodBase m, behaviac.EventMetaInfoAttribute a, string eventName)
-            : base(m, a, eventName)
+        protected System.Reflection.FieldInfo field_;
+
+        public CFieldInfo(System.Reflection.FieldInfo f, behaviac.MemberMetaInfoAttribute a)
+            : base(f.Name, a)
+        {
+            this.field_ = f;
+        }
+
+        public override Type MemberType
+        {
+            get
+            {
+                return field_.FieldType;
+            }
+        }
+
+        public override bool ISSTATIC()
+        {
+            return this.field_.IsStatic;
+        }
+
+        public override string GetClassNameString()
+        {
+            return this.field_.DeclaringType.FullName;
+        }
+
+        public override object Get(object agentFrom)
+        {
+            if (this.ISSTATIC())
+            {
+                return this.field_.GetValue(null);
+
+            }
+            else
+            {
+                return this.field_.GetValue(agentFrom);
+            }
+        }
+
+        public override void Set(object objectFrom, object v)
+        {
+            this.field_.SetValue(objectFrom, v);
+        }
+    }
+
+    public class CProperyInfo : CMemberBase
+    {
+        private PropertyInfo property_;
+
+        private static MethodInfo getGetMethod(PropertyInfo property)
+        {
+#if ( !UNITY_EDITOR && UNITY_METRO )
+            return property.GetMethod;
+#else
+            return property.GetGetMethod();
+#endif
+        }
+
+        private static MethodInfo getSetMethod(PropertyInfo property)
+        {
+#if ( !UNITY_EDITOR && UNITY_METRO )
+            return property.SetMethod;
+#else
+            return property.GetSetMethod();
+#endif
+        }
+
+        public CProperyInfo(System.Reflection.PropertyInfo p, behaviac.MemberMetaInfoAttribute a)
+            : base(p.Name, a)
+        {
+            this.property_ = p;
+        }
+
+        public override Type MemberType
+        {
+            get
+            {
+                return this.property_.PropertyType;
+            }
+        }
+
+        public override string GetClassNameString()
+        {
+            return this.property_.DeclaringType.FullName;
+        }
+
+        public override object Get(object agentFrom)
+        {
+            if (this.ISSTATIC())
+            {
+                var getMethod = getGetMethod(this.property_);
+                return getMethod.Invoke(null, null);
+
+            }
+            else
+            {
+                var getMethod = getGetMethod(this.property_);
+                return getMethod.Invoke(agentFrom, null);
+            }
+        }
+
+        public override void Set(object objectFrom, object v)
+        {
+            var setMethod = getSetMethod(this.property_);
+
+            if (setMethod == null)
+            {
+            }
+            else
+            {
+                var paramArray = new object[1];
+                paramArray[0] = v;
+                setMethod.Invoke(objectFrom, paramArray);
+            }
+        }
+    }
+
+    public class CCustomMethod : CMethodBase
+    {
+        private string m_className;
+        protected List<Type> m_paramTypes = null;
+
+        public CCustomMethod(string className, string eventName)
+            : base(null, null, eventName)
+        {
+            m_className = className;
+        }
+
+        protected CCustomMethod(CCustomMethod copy)
+            : base(copy)
+        {
+            m_className = copy.m_className;
+            m_paramTypes = copy.m_paramTypes;
+        }
+
+        public void AddParamType(string typeName)
+        {
+            Type type = Utils.GetTypeFromName(typeName);
+
+            if (this.m_paramTypes == null)
+            {
+                this.m_paramTypes = new List<Type>();
+            }
+
+            this.m_paramTypes.Add(type);
+        }
+
+        public override int ParamsCount
+        {
+            get
+            {
+                if (this.m_paramTypes != null)
+                {
+                    return this.m_paramTypes.Count;
+                }
+
+                return 0;
+            }
+        }
+
+        public override List<Type> ParamTypes
+        {
+            get
+            {
+                return this.m_paramTypes;
+            }
+        }
+
+        public override string GetClassNameString()
+        {
+            return m_className;
+        }
+    }
+
+    public class CNamedEvent : CCustomMethod
+    {
+        public CNamedEvent(string className, string eventName)
+            : base(className, eventName)
         {
         }
 
-        private CNamedEvent(CNamedEvent copy) : base(copy)
+        protected CNamedEvent(CNamedEvent copy)
+            : base(copy)
         {
         }
 
@@ -515,12 +792,12 @@ namespace behaviac
             return true;
         }
 
-        bool IsFired()
+        private bool m_bFired;
+
+        public bool IsFired()
         {
             return this.m_bFired;
         }
-
-        bool        m_bFired;
 
         public void SetFired(Agent pAgent, bool bFired)
         {
@@ -534,34 +811,103 @@ namespace behaviac
 
         public void SetParam<ParamType>(Agent pAgent, ParamType param)
         {
-            string eventName = string.Format("{0}::{1}::param0", this.GetClassNameString().Replace(".", "::"), this.Name);
+            Debug.Check(this.m_paramTypes != null && m_paramTypes.Count == 1);
+            Debug.Check(this.m_paramTypes[0] == typeof(ParamType), "SetParam's Param is not compatible");
+
+            //string eventName = string.Format("{0}_param0", this.Name);
+            AgentState currentState = pAgent.Variables.Push(false);
+            Debug.Check(currentState != null);
+
+            string eventName = string.Format("{0}{1}", Task.LOCAL_TASK_PARAM_PRE, 0);
+
+            //AgentProperties agentT = AgentProperties.Get(pAgent.GetClassTypeName());
             pAgent.SetVariable(eventName, param);
         }
 
         public void SetParam<ParamType1, ParamType2>(Agent pAgent, ParamType1 param1, ParamType2 param2)
         {
-            string eventName1 = string.Format("{0}::{1}::param0", this.GetClassNameString().Replace(".", "::"), this.Name);
-            pAgent.SetVariable(eventName1, param1);
+            Debug.Check(this.m_paramTypes != null && m_paramTypes.Count == 2);
+            Debug.Check(this.m_paramTypes[0] == typeof(ParamType1), "SetParam's Param1 is not compatible");
+            Debug.Check(this.m_paramTypes[1] == typeof(ParamType2), "SetParam's Param2 is not compatible");
 
-            string eventName2 = string.Format("{0}::{1}::param1", this.GetClassNameString().Replace(".", "::"), this.Name);
+            AgentState currentState = pAgent.Variables.Push(false);
+            Debug.Check(currentState != null);
+
+            //AgentProperties agentT = AgentProperties.Get(pAgent.GetClassTypeName());
+
+            string eventName1 = string.Format("{0}{1}", Task.LOCAL_TASK_PARAM_PRE, 0);
+            pAgent.SetVariable(eventName1, param1);
+            string eventName2 = string.Format("{0}{1}", Task.LOCAL_TASK_PARAM_PRE, 1);
             pAgent.SetVariable(eventName2, param2);
         }
 
         public void SetParam<ParamType1, ParamType2, ParamType3>(Agent pAgent, ParamType1 param1, ParamType2 param2, ParamType3 param3)
         {
-            string eventName1 = string.Format("{0}::{1}::param0", this.GetClassNameString().Replace(".", "::"), this.Name);
+            Debug.Check(this.m_paramTypes != null && m_paramTypes.Count == 3);
+            Debug.Check(this.m_paramTypes[0] == typeof(ParamType1), "SetParam's Param1 is not compatible");
+            Debug.Check(this.m_paramTypes[1] == typeof(ParamType2), "SetParam's Param2 is not compatible");
+            Debug.Check(this.m_paramTypes[2] == typeof(ParamType3), "SetParam's Param3 is not compatible");
+
+            AgentState currentState = pAgent.Variables.Push(false);
+            Debug.Check(currentState != null);
+
+            //AgentProperties agentT = AgentProperties.Get(pAgent.GetClassTypeName());
+
+            string eventName1 = string.Format("{0}{1}", Task.LOCAL_TASK_PARAM_PRE, 0);
             pAgent.SetVariable(eventName1, param1);
-
-            string eventName2 = string.Format("{0}::{1}::param1", this.GetClassNameString().Replace(".", "::"), this.Name);
+            string eventName2 = string.Format("{0}{1}", Task.LOCAL_TASK_PARAM_PRE, 1);
             pAgent.SetVariable(eventName2, param2);
-
-            string eventName3 = string.Format("{0}::{1}::param2", this.GetClassNameString().Replace(".", "::"), this.Name);
+            string eventName3 = string.Format("{0}{1}", Task.LOCAL_TASK_PARAM_PRE, 2);
             pAgent.SetVariable(eventName3, param3);
+        }
+    }
+
+    public class CTaskMethod : CNamedEvent
+    {
+        public CTaskMethod(string className, string eventName)
+            : base(className, eventName)
+        {
+        }
+
+        private CTaskMethod(CTaskMethod copy)
+            : base(copy)
+        {
+        }
+
+        public override CMethodBase clone()
+        {
+            return new CTaskMethod(this);
+        }
+
+        public void SetTaskParams(Agent pAgent)
+        {
+            if (this.ParamsCount > 0)
+            {
+                this.GetParamsValue(pAgent, false);
+
+                string agentType = pAgent.GetClassTypeName();
+                Debug.Check(agentType != null);
+                AgentProperties agentT = AgentProperties.Get(agentType);
+
+                for (int i = 0; i < this.m_params_value.Length; ++i)
+                {
+                    string paramName = string.Format("{0}{1}", Task.LOCAL_TASK_PARAM_PRE, i);
+                    CTaskMethod.SetTaskParam(pAgent, agentT, paramName, this.m_params_value[i]);
+                }
+            }
+        }
+
+        private static void SetTaskParam(Agent pAgent, AgentProperties agentT, string paramName, object paramValu)
+        {
+            //pAgent.SetVariable(paramName, parasValue[i]);
+            Property localProperty = agentT.GetLocal(paramName);
+            localProperty.SetValue(pAgent, paramValu);
         }
     }
 
     public enum E_VariableComparisonType
     {
+        VariableComparisonType_Assignment,      //( "Assignment (=)" )
         VariableComparisonType_Equal,           //( "Equal (==)" )
         VariableComparisonType_NotEqual,        //( "Not Equal (!=)" )
         VariableComparisonType_Greater,         //( "Greater (>)"  )
@@ -575,191 +921,176 @@ namespace behaviac
     public class VariableComparator
     {
         public static E_VariableComparisonType ParseComparisonType(string comparionOperator)
+    {
+        if (comparionOperator == "Assignment")
         {
-            if (comparionOperator == "Equal")
-            {
-                return E_VariableComparisonType.VariableComparisonType_Equal;
-            }
-            else if (comparionOperator == "NotEqual")
-            {
-                return E_VariableComparisonType.VariableComparisonType_NotEqual;
-            }
-            else if (comparionOperator == "Greater")
-            {
-                return E_VariableComparisonType.VariableComparisonType_Greater;
-            }
-            else if (comparionOperator == "GreaterEqual")
-            {
-                return E_VariableComparisonType.VariableComparisonType_GreaterEqual;
-            }
-            else if (comparionOperator == "Less")
-            {
-                return E_VariableComparisonType.VariableComparisonType_Less;
-            }
-            else if (comparionOperator == "LessEqual")
-            {
-                return E_VariableComparisonType.VariableComparisonType_LessEqual;
-            }
-            else
-            {
-                Debug.Check(false);
-            }
+            return E_VariableComparisonType.VariableComparisonType_Assignment;
 
+        }
+        else if (comparionOperator == "Equal")
+        {
             return E_VariableComparisonType.VariableComparisonType_Equal;
-        }
 
-        public VariableComparator(Property lhs, Property rhs)
+        }
+        else if (comparionOperator == "NotEqual")
         {
-            m_lhs = lhs;
-            m_rhs = rhs;
-        }
+            return E_VariableComparisonType.VariableComparisonType_NotEqual;
 
-        VariableComparator(VariableComparator copy)
+        }
+        else if (comparionOperator == "Greater")
         {
-            m_lhs = copy.m_lhs;
-            m_rhs = copy.m_rhs;
-        }
+            return E_VariableComparisonType.VariableComparisonType_Greater;
 
-        ~VariableComparator ()
+        }
+        else if (comparionOperator == "GreaterEqual")
         {
-            m_lhs = null;
-            m_rhs = null;
-        }
+            return E_VariableComparisonType.VariableComparisonType_GreaterEqual;
 
-        public VariableComparator clone()
+        }
+        else if (comparionOperator == "Less")
         {
-            return new VariableComparator(this);
-        }
+            return E_VariableComparisonType.VariableComparisonType_Less;
 
-        public static VariableComparator Create(string typeName, Property lhs, Property rhs)
+        }
+        else if (comparionOperator == "LessEqual")
         {
-            return new VariableComparator(lhs, rhs);
-        }
+            return E_VariableComparisonType.VariableComparisonType_LessEqual;
 
-        //virtual void Serialize( Serializer& serializer ) = 0;
-        public bool Execute(Agent agentL, Agent agentR)
+        }
+        else
         {
-            object lhs = this.m_lhs.GetValue(agentL);
-            object rhs = this.m_rhs.GetValue(agentR);
-
-            switch (this.m_comparisonType)
-            {
-                case E_VariableComparisonType.VariableComparisonType_Equal:
-                    if (System.Object.ReferenceEquals(lhs, null))
-                    {
-                        return System.Object.ReferenceEquals(rhs, null);
-                    }
-                    else
-                    {
-                        return lhs.Equals(rhs);
-                    }
-
-                case E_VariableComparisonType.VariableComparisonType_NotEqual:
-                    if (System.Object.ReferenceEquals(lhs, null))
-                    {
-                        return !System.Object.ReferenceEquals(rhs, null);
-                    }
-                    else
-                    {
-                        return !lhs.Equals(rhs);
-                    }
-
-                case E_VariableComparisonType.VariableComparisonType_Greater:
-                    return Details.Greater(lhs, rhs);
-
-                case E_VariableComparisonType.VariableComparisonType_GreaterEqual:
-                    return Details.GreaterEqual(lhs, rhs);
-
-                case E_VariableComparisonType.VariableComparisonType_Less:
-                    return Details.Less(lhs, rhs);
-
-                case E_VariableComparisonType.VariableComparisonType_LessEqual:
-                    return Details.LessEqual(lhs, rhs);
-
-                default:
-                    Debug.Check(false, "Unsupported comparison type");
-                    break;
-            }
-
-            return false;
+            Debug.Check(false);
         }
 
-        public bool Execute(object lhs, Agent parent, Agent agentR)
+        return E_VariableComparisonType.VariableComparisonType_Equal;
+    }
+
+    public VariableComparator(Property lhs, CMethodBase lhs_m, Property rhs, CMethodBase rhs_m)
+    {
+        m_lhs = lhs;
+        m_lhs_m = lhs_m;
+        m_rhs = rhs;
+        m_rhs_m = rhs_m;
+    }
+
+    private VariableComparator(VariableComparator copy)
+    {
+        m_lhs = copy.m_lhs;
+        m_lhs_m = copy.m_lhs_m;
+        m_rhs = copy.m_rhs;
+        m_rhs_m = copy.m_rhs_m;
+    }
+
+    ~VariableComparator()
+    {
+        m_lhs = null;
+        m_lhs_m = null;
+        m_rhs = null;
+        m_rhs_m = null;
+    }
+
+    public VariableComparator clone()
+    {
+        return new VariableComparator(this);
+    }
+
+    public static VariableComparator Create(Property lhs, CMethodBase lhs_m, Property rhs, CMethodBase rhs_m)
+    {
+        return new VariableComparator(lhs, lhs_m, rhs, rhs_m);
+    }
+
+    public bool Execute(Agent agent)
+    {
+        object lhs = null;
+
+        Agent agentL = agent;
+
+        if (this.m_lhs != null)
         {
-            object rhs = this.m_rhs.GetValue(agentR);
+            agentL = this.m_lhs.GetParentAgent(agentL);
+            lhs = this.m_lhs.GetValue(agentL);
 
-            switch (this.m_comparisonType)
-            {
-                case E_VariableComparisonType.VariableComparisonType_Equal:
-                    {
-                        if (lhs == null)
-                        {
-                            if (rhs == null)
-                            {
-                                return true;
-                            }
-
-                            return false;
-                        }
-
-                        return lhs.Equals(rhs);
-                    }
-
-                case E_VariableComparisonType.VariableComparisonType_NotEqual:
-                    {
-                        if (lhs == null)
-                        {
-                            if (rhs != null)
-                            {
-                                return true;
-                            }
-
-                            return false;
-                        }
-
-                        return !lhs.Equals(rhs);
-                    }
-
-                case E_VariableComparisonType.VariableComparisonType_Greater:
-                    return Details.Greater(lhs, rhs);
-
-                case E_VariableComparisonType.VariableComparisonType_GreaterEqual:
-                    return Details.GreaterEqual(lhs, rhs);
-
-                case E_VariableComparisonType.VariableComparisonType_Less:
-                    return Details.Less(lhs, rhs);
-
-                case E_VariableComparisonType.VariableComparisonType_LessEqual:
-                    return Details.LessEqual(lhs, rhs);
-
-                default:
-                    Debug.Check(false, "Unsupported comparison type");
-                    break;
-            }
-
-            return false;
         }
-
-        void SetProperty(Property lhs, Property rhs)
+        else
         {
-            m_lhs = lhs;
-            m_rhs = rhs;
+            Debug.Check(this.m_lhs_m != null);
+            lhs = this.m_lhs_m.Invoke(agentL);
         }
 
-        public void SetComparisonType(E_VariableComparisonType type)
+        object rhs = null;
+
+        Agent agentR = agent;
+
+        if (this.m_rhs != null)
         {
-            m_comparisonType = type;
-        }
+            agentR = this.m_rhs.GetParentAgent(agentR);
+            rhs = this.m_rhs.GetValue(agentR);
 
-        E_VariableComparisonType GetComparisonType()
+        }
+        else
         {
-            return m_comparisonType;
+            Debug.Check(this.m_rhs_m != null);
+            rhs = this.m_rhs_m.Invoke(agentR);
         }
 
-        protected Property m_lhs;
-        protected Property m_rhs;
-        //The operator used in the comparison
-        protected E_VariableComparisonType m_comparisonType;
+        switch (this.m_comparisonType)
+        {
+            case E_VariableComparisonType.VariableComparisonType_Assignment:
+                Debug.Check(this.m_lhs != null);
+                //this.m_lhs.SetFrom(agentR, this.m_rhs, agentL);
+                this.m_lhs.SetValue(agentL, rhs);
+
+                return true;
+
+            case E_VariableComparisonType.VariableComparisonType_Equal:
+                return Details.Equals_(lhs, rhs);
+
+            case E_VariableComparisonType.VariableComparisonType_NotEqual:
+                return !Details.Equals_(lhs, rhs);
+
+            case E_VariableComparisonType.VariableComparisonType_Greater:
+                return Details.Greater(lhs, rhs);
+
+            case E_VariableComparisonType.VariableComparisonType_GreaterEqual:
+                return Details.GreaterEqual(lhs, rhs);
+
+            case E_VariableComparisonType.VariableComparisonType_Less:
+                return Details.Less(lhs, rhs);
+
+            case E_VariableComparisonType.VariableComparisonType_LessEqual:
+                return Details.LessEqual(lhs, rhs);
+
+            default:
+                Debug.Check(false, "Unsupported comparison type");
+                break;
+        }
+
+        return false;
+    }
+
+    private void SetProperty(Property lhs, Property rhs)
+    {
+        m_lhs = lhs;
+        m_rhs = rhs;
+    }
+
+    public void SetComparisonType(E_VariableComparisonType type)
+    {
+        m_comparisonType = type;
+    }
+
+    private E_VariableComparisonType GetComparisonType()
+    {
+        return m_comparisonType;
+    }
+
+    protected Property m_lhs;
+    protected CMethodBase m_lhs_m;
+    protected Property m_rhs;
+    protected CMethodBase m_rhs_m;
+
+    //The operator used in the comparison
+    protected E_VariableComparisonType m_comparisonType;
     }
 
     public class CTextNode
@@ -777,37 +1108,41 @@ namespace behaviac
     {
         public static bool IsNull(System.Object aObj)
         {
-            return aObj == null || aObj.Equals(null);
+            return aObj == null;
         }
 
-		public static bool IsStaticType(Type type)
-		{
-			return type != null && type.IsAbstract && type.IsSealed;
-		}
-		
-		private static Dictionary<string, bool> ms_staticClasses;
-		private static Dictionary<string, bool> StaticClasses
-		{
-			get
-			{
-				if (ms_staticClasses == null)
-				{
-					ms_staticClasses = new Dictionary<string, bool>();
-				}
-				return ms_staticClasses;
-			}
-		}
+        public static bool IsStaticType(Type type)
+        {
+            return type != null && type.IsAbstract && type.IsSealed;
+        }
 
-		public static void AddStaticClass(Type type)
-		{
-			if (Utils.IsStaticType(type))
-				Utils.StaticClasses[type.FullName] = true;
-		}
+        private static Dictionary<string, bool> ms_staticClasses;
 
-		public static bool IsStaticClass(string className)
-		{
-			return Utils.StaticClasses.ContainsKey(className);
-		}
+        private static Dictionary<string, bool> StaticClasses
+        {
+            get
+            {
+                if (ms_staticClasses == null)
+                {
+                    ms_staticClasses = new Dictionary<string, bool>();
+                }
+
+                return ms_staticClasses;
+            }
+        }
+
+        public static void AddStaticClass(Type type)
+        {
+            if (Utils.IsStaticType(type))
+            {
+                Utils.StaticClasses[type.FullName] = true;
+            }
+        }
+
+        public static bool IsStaticClass(string className)
+        {
+            return Utils.StaticClasses.ContainsKey(className);
+        }
 
         public static bool IsDefault<T>(T obj)
         {
@@ -822,31 +1157,7 @@ namespace behaviac
 
         public static uint MakeVariableId(string idstring)
         {
-			return CRC32.CalcCRC(idstring);
-        }
-
-        public static bool IsParVar(string variableName)
-        {
-            int pSep = variableName.LastIndexOf(':');
-
-            if (pSep != -1 && variableName[pSep - 1] == ':')
-            {
-                return false;
-            }
-
-            return true;
-        }
-
-        public static string GetNameWithoutClassName(string variableName)
-        {
-            int pSep = variableName.LastIndexOf(':');
-
-            if (pSep > 0 && variableName[pSep - 1] == ':')
-            {
-                return variableName.Substring(pSep + 1);
-            }
-
-            return variableName;
+            return CRC32.CalcCRC(idstring);
         }
 
         public static int GetClassTypeNumberId<T>()
@@ -867,15 +1178,17 @@ namespace behaviac
         {
             // search base class
             Type type = Type.GetType(typeName);
+
             if (type != null)
             {
                 return type;
             }
 
             // search loaded plugins
-            foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies())
+            foreach(Assembly a in AppDomain.CurrentDomain.GetAssemblies())
             {
                 type = a.GetType(typeName);
+
                 if (type != null)
                 {
                     return type;
@@ -886,17 +1199,21 @@ namespace behaviac
             if (typeName.StartsWith("System.Collections.Generic.List"))
             {
                 int startIndex = typeName.IndexOf("[[");
+
                 if (startIndex > -1)
                 {
                     int endIndex = typeName.IndexOf(",");
+
                     if (endIndex < 0)
                     {
                         endIndex = typeName.IndexOf("]]");
                     }
+
                     if (endIndex > startIndex)
                     {
                         string item = typeName.Substring(startIndex + 2, endIndex - startIndex - 2);
                         type = Utils.GetType(item);
+
                         if (type != null)
                         {
                             type = typeof(List<>).MakeGenericType(type);
@@ -909,150 +1226,211 @@ namespace behaviac
             return null;
         }
 
-        static Dictionary<string, string> ms_type_mapping = new Dictionary<string, string>()
+        private static Dictionary<string, string> ms_type_mapping = new Dictionary<string, string>()
         {
-                {"Boolean"          , "bool"}, 
-                {"System.Boolean"   , "bool"}, 
-                {"Int32"            , "int"}, 
-                {"System.Int32"     , "int"}, 
-                {"UInt32"           , "uint"}, 
-                {"System.UInt32"    , "uint"}, 
-                {"Int16"            , "short"}, 
-                {"System.Int16"     , "short"}, 
-                {"UInt16"           , "ushort"}, 
-                {"System.UInt16"    , "ushort"}, 
-				{"Int8"             , "sbyte"}, 
-				{"System.Int8"      , "sbyte"}, 
-                {"SByte"            , "sbyte"}, 
-				{"System.SByte"     , "sbyte"}, 
-				{"UInt8"            , "ubyte"}, 
-				{"System.UInt8"     , "ubyte"}, 
-				{"Byte"             , "ubyte"}, 
-				{"System.Byte"      , "ubyte"}, 
-				{"Char"      		, "char"}, 
-                {"Int64"            , "long"}, 
-                {"System.Int64"     , "long"}, 
-                {"UInt64"           , "ulong"}, 
-                {"System.UInt64"    , "ulong"}, 
-                {"Single"           , "float"}, 
-                {"System.Single"    , "float"}, 
-                {"Double"           , "double"}, 
-                {"System.Double"    , "double"}, 
-                {"String"           , "string"}, 
-                {"System.String"    , "string"}, 
-                {"Void"             , "void"}
+            {"Boolean"          , "bool"},
+            {"System.Boolean"   , "bool"},
+            {"Int32"            , "int"},
+            {"System.Int32"     , "int"},
+            {"UInt32"           , "uint"},
+            {"System.UInt32"    , "uint"},
+            {"Int16"            , "short"},
+            {"System.Int16"     , "short"},
+            {"UInt16"           , "ushort"},
+            {"System.UInt16"    , "ushort"},
+            {"Int8"             , "sbyte"},
+            {"System.Int8"      , "sbyte"},
+            {"SByte"            , "sbyte"},
+            {"System.SByte"     , "sbyte"},
+            {"UInt8"            , "ubyte"},
+            {"System.UInt8"     , "ubyte"},
+            {"Byte"             , "ubyte"},
+            {"System.Byte"      , "ubyte"},
+            {"Char"      		, "char"},
+            {"Int64"            , "long"},
+            {"System.Int64"     , "long"},
+            {"UInt64"           , "ulong"},
+            {"System.UInt64"    , "ulong"},
+            {"Single"           , "float"},
+            {"System.Single"    , "float"},
+            {"Double"           , "double"},
+            {"System.Double"    , "double"},
+            {"String"           , "string"},
+            {"System.String"    , "string"},
+            {"Void"             , "void"}
         };
 
-		private static object GetDefaultValue(Type t)
-		{
-			if (t.IsValueType)
-			{
-				return Activator.CreateInstance(t);
-			}
-			
-			return null;
-		}
+        private static object GetDefaultValue(Type t)
+        {
+            if (t.IsValueType)
+            {
+                return Activator.CreateInstance(t);
+            }
 
-		public static object GetValueFromString(Type type, string value)
-		{
-			if (value != null)
-			{
-				if (type == typeof(string) && !string.IsNullOrEmpty(value) &&
-				    value.Length > 1 && value[0] == '\"' && value[value.Length-1] == '\"')
-				{
-					value = value.Substring(1, value.Length - 2);
-				}
+            return null;
+        }
 
-				try
-				{
-					TypeConverter converter = TypeDescriptor.GetConverter(type);
-					return converter.ConvertFromString(value);
-				}
-				catch
-				{
-					if (type == typeof(bool))
-					{
-						bool b;
-						if (bool.TryParse(value, out b))
-							return b;
-					}
-					else if (type == typeof(int))
-					{
-						int i;
-						if (int.TryParse(value, out i))
-							return i;
-					}
-					else if (type == typeof(uint))
-					{
-						uint ui;
-						if (uint.TryParse(value, out ui))
-							return ui;
-					}
-					else if (type == typeof(short))
-					{
-						short s;
-						if (short.TryParse(value, out s))
-							return s;
-					}
-					else if (type == typeof(ushort))
-					{
-						ushort us;
-						if (ushort.TryParse(value, out us))
-							return us;
-					}
-					else if (type == typeof(char))
-					{
-						char c;
-						if (char.TryParse(value, out c))
-							return c;
-					}
-					else if (type == typeof(sbyte))
-					{
-						sbyte sb;
-						if (sbyte.TryParse(value, out sb))
-							return sb;
-					}
-					else if (type == typeof(byte))
-					{
-						byte b;
-						if (byte.TryParse(value, out b))
-							return b;
-					}
-					else if (type == typeof(long))
-					{
-						long l;
-						if (long.TryParse(value, out l))
-							return l;
-					}
-					else if (type == typeof(ulong))
-					{
-						ulong ul;
-						if (ulong.TryParse(value, out ul))
-							return ul;
-					}
-					else if (type == typeof(float))
-					{
-						float f;
-						if (float.TryParse(value, out f))
-							return f;
-					}
-					else if (type == typeof(double))
-					{
-						double d;
-						if (double.TryParse(value, out d))
-							return d;
-					}
-					else if (type == typeof(string))
-					{
-						return value;
-					}
-				}
-			}
+        public static object FromStringPrimitive(Type type, string valueStr)
+        {
+            if (valueStr != null)
+            {
+                if (type == typeof(string) && !string.IsNullOrEmpty(valueStr) &&
+                    valueStr.Length > 1 && valueStr[0] == '\"' && valueStr[valueStr.Length - 1] == '\"')
+                {
+                    valueStr = valueStr.Substring(1, valueStr.Length - 2);
+                }
 
-			return GetDefaultValue(type);
-		}
+                try
+                {
+                    TypeConverter converter = TypeDescriptor.GetConverter(type);
+                    return converter.ConvertFromString(valueStr);
 
-        public static Type GetTypeFromName(string typeName)
+                }
+                catch
+                {
+                    if (type == typeof(bool))
+                    {
+                        bool b;
+
+                        if (bool.TryParse(valueStr, out b))
+                        {
+                            return b;
+                        }
+
+                    }
+                    else if (type == typeof(int))
+                    {
+                        int i;
+
+                        if (int.TryParse(valueStr, out i))
+                        {
+                            return i;
+                        }
+
+                    }
+                    else if (type == typeof(uint))
+                    {
+                        uint ui;
+
+                        if (uint.TryParse(valueStr, out ui))
+                        {
+                            return ui;
+                        }
+
+                    }
+                    else if (type == typeof(short))
+                    {
+                        short s;
+
+                        if (short.TryParse(valueStr, out s))
+                        {
+                            return s;
+                        }
+
+                    }
+                    else if (type == typeof(ushort))
+                    {
+                        ushort us;
+
+                        if (ushort.TryParse(valueStr, out us))
+                        {
+                            return us;
+                        }
+
+                    }
+                    else if (type == typeof(char))
+                    {
+                        char c;
+
+                        if (char.TryParse(valueStr, out c))
+                        {
+                            return c;
+                        }
+
+                    }
+                    else if (type == typeof(sbyte))
+                    {
+                        sbyte sb;
+
+                        if (sbyte.TryParse(valueStr, out sb))
+                        {
+                            return sb;
+                        }
+
+                    }
+                    else if (type == typeof(byte))
+                    {
+                        byte b;
+
+                        if (byte.TryParse(valueStr, out b))
+                        {
+                            return b;
+                        }
+
+                    }
+                    else if (type == typeof(long))
+                    {
+                        long l;
+
+                        if (long.TryParse(valueStr, out l))
+                        {
+                            return l;
+                        }
+
+                    }
+                    else if (type == typeof(ulong))
+                    {
+                        ulong ul;
+
+                        if (ulong.TryParse(valueStr, out ul))
+                        {
+                            return ul;
+                        }
+
+                    }
+                    else if (type == typeof(float))
+                    {
+                        float f;
+
+                        if (float.TryParse(valueStr, out f))
+                        {
+                            return f;
+                        }
+
+                    }
+                    else if (type == typeof(double))
+                    {
+                        double d;
+
+                        if (double.TryParse(valueStr, out d))
+                        {
+                            return d;
+                        }
+
+                    }
+                    else if (type == typeof(string))
+                    {
+                        return valueStr;
+
+                    }
+                    else if (type.IsEnum)
+                    {
+                        object ret = Enum.Parse(type, valueStr, true);
+
+                        return ret;
+
+                    }
+                    else
+                    {
+                        Debug.Check(false);
+                    }
+                }
+            }
+
+            return GetDefaultValue(type);
+        }
+
+        public static Type GetPrimitiveTypeFromName(string typeName)
         {
             if (string.IsNullOrEmpty(typeName))
             {
@@ -1063,34 +1441,123 @@ namespace behaviac
             {
                 case "bool":
                     return typeof(bool);
+
                 case "int":
                     return typeof(int);
+
                 case "uint":
                     return typeof(uint);
+
                 case "short":
                     return typeof(short);
+
                 case "ushort":
                     return typeof(ushort);
+
                 case "char":
                     return typeof(char);
+
                 case "sbyte":
                     return typeof(sbyte);
-				case "ubyte":
-				case "byte":
+
+                case "ubyte":
+                case "byte":
                     return typeof(byte);
+
                 case "long":
+                case "llong":
                     return typeof(long);
+
                 case "ulong":
+                case "ullong":
                     return typeof(ulong);
+
                 case "float":
                     return typeof(float);
+
                 case "double":
                     return typeof(double);
+
                 case "string":
                     return typeof(string);
             }
 
             return Utils.GetType(typeName);
+        }
+
+        private static Type GetElementTypeFromName(string typeName)
+        {
+            bool bArrayType = false;
+
+            //array type
+            if (typeName.StartsWith("vector<"))
+            {
+                bArrayType = true;
+            }
+
+            if (bArrayType)
+            {
+                int bracket0 = typeName.IndexOf('<');
+                int bracket1 = typeName.IndexOf('>');
+                int len = bracket1 - bracket0 - 1;
+
+                string elementTypeName = typeName.Substring(bracket0 + 1, len);
+                Type elementType = Utils.GetTypeFromName(elementTypeName);
+
+                return elementType;
+            }
+
+            return null;
+        }
+
+        public static Type GetTypeFromName(string typeName)
+        {
+            if (typeName == "void*")
+            {
+                return typeof(Agent);
+            }
+
+            Type type = Agent.GetTypeFromName(typeName);
+
+            if (type == null)
+            {
+                type = Utils.GetPrimitiveTypeFromName(typeName);
+
+                if (type == null)
+                {
+                    Type elementType = Utils.GetElementTypeFromName(typeName);
+
+                    if (elementType != null)
+                    {
+                        Type vectorType = typeof(List<>).MakeGenericType(elementType);
+                        return vectorType;
+
+                    }
+                    else
+                    {
+                        typeName = typeName.Replace("::", ".");
+                        type = Utils.GetType(typeName);
+                    }
+                }
+            }
+
+            return type;
+        }
+
+        //if it is an array, return the element type
+        public static Type GetTypeFromName(string typeName, ref bool bIsArrayType)
+        {
+            Type elementType = Utils.GetElementTypeFromName(typeName);
+
+            if (elementType != null)
+            {
+                bIsArrayType = true;
+                return elementType;
+            }
+
+            Type type = Utils.GetTypeFromName(typeName);
+
+            return type;
         }
 
         public static string GetNativeTypeName(string typeName)
@@ -1100,19 +1567,34 @@ namespace behaviac
                 return string.Empty;
             }
 
-            foreach (KeyValuePair<string, string> pair in ms_type_mapping)
+            if (typeName.StartsWith("vector<"))
             {
-                if (pair.Key == typeName)
+                return typeName;
+            }
+
+            bool bRef = false;
+            string key;
+
+            if (typeName.EndsWith("&"))
+            {
+                //trim the last '&'
+                key = typeName.Substring(0, typeName.Length - 1);
+                bRef = true;
+            }
+            else
+            {
+                key = typeName;
+            }
+
+            if (ms_type_mapping.ContainsKey(key))
+            {
+                if (bRef)
                 {
-                    return pair.Value;
+                    return ms_type_mapping[key] + "&";
                 }
                 else
                 {
-                    string refType = pair.Key + "&";
-                    if (refType == typeName)
-                    {
-                        return pair.Value + "&";
-                    }
+                    return ms_type_mapping[key];
                 }
             }
 
@@ -1153,25 +1635,226 @@ namespace behaviac
             return type != null && !type.IsByRef && (type.IsClass || type.IsValueType) && type != typeof(void) && !type.IsEnum && !type.IsPrimitive && !IsStringType(type) && !IsArrayType(type);
         }
 
-		public static bool IsAgentType(Type type)
-		{
-			return (type == typeof(Agent) || type.IsSubclassOf(typeof(Agent)));
-		}
+        public static bool IsCustomStructType(Type type)
+        {
+            return type != null && !type.IsByRef && type.IsValueType && type != typeof(void) && !type.IsEnum && !type.IsPrimitive && !IsStringType(type) && !IsArrayType(type);
+        }
 
-		public static bool IsGameObjectType(Type type)
-		{
-			return (type == typeof(UnityEngine.GameObject) || type.IsSubclassOf(typeof(UnityEngine.GameObject)));
-		}
+        public static bool IsAgentType(Type type)
+        {
+            Debug.Check(type != null);
+            return (type == typeof(Agent) || type.IsSubclassOf(typeof(Agent)));
+        }
 
-		public static bool IsNullValueType(Type type)
-		{
-			return IsAgentType(type) || IsGameObjectType(type);
-		}
+        public static bool IsGameObjectType(Type type)
+        {
+            return (type == typeof(UnityEngine.GameObject) || type.IsSubclassOf(typeof(UnityEngine.GameObject)));
+        }
+
+        public static bool IsRefNullType(Type type)
+        {
+            return IsAgentType(type) || IsGameObjectType(type);
+        }
+
+        public static bool IfEquals(object l, object r)
+        {
+            if (l == r)
+            {
+                //if both are null, then equals
+                return true;
+            }
+
+            if (l == null || r == null)
+            {
+                //if one of them is null, not equal
+                return false;
+            }
+
+            Type type = l.GetType();
+
+            if (type != r.GetType())
+            {
+                return false;
+            }
+
+            bool bIsArrayType = Utils.IsArrayType(type);
+
+            if (bIsArrayType)
+            {
+                IList la = (IList)l;
+                IList ra = (IList)r;
+
+                if (la.Count != ra.Count)
+                {
+                    return false;
+                }
+
+                for (int i = 0; i < la.Count; ++i)
+                {
+                    object li = la[i];
+                    object ri = ra[i];
+
+                    bool bi = IfEquals(li, ri);
+
+                    if (!bi)
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+
+            }
+            else
+            {
+                bool bIsStruct = Utils.IsCustomClassType(type);
+
+                if (bIsStruct)
+                {
+                    FieldInfo[] fields = type.GetFields(BindingFlags.DeclaredOnly | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+                    foreach(FieldInfo f in fields)
+                    {
+                        object lf = f.GetValue(l);
+                        object rf = f.GetValue(r);
+                        bool bi = IfEquals(lf, rf);
+
+                        if (!bi)
+                        {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                }
+            }
+
+            bool bIsEqual = Details.Equals_(l, r);
+
+            return bIsEqual;
+        }
+
+        public static void Clone<T>(ref T o, T c)
+        {
+            if (c == null)
+            {
+                o = default(T);
+                return ;
+            }
+
+            Type type = c.GetType();
+
+            if (type.IsPrimitive || type.IsEnum || type.IsValueType)
+            {
+                //c is boxed, it needs to make a new copy
+                //if (o == null)
+                //{
+                //    o =(T) Activator.CreateInstance(type);
+                //}
+
+                o = c;
+            }
+            else if (type == typeof(string))
+            {
+                //string is immutable, it doesn't need to make a new copy
+                o = c;
+            }
+            else if (type.IsArray)
+            {
+                Type elementType = type.GetElementType();
+
+                if (elementType == null)
+                {
+                    elementType = Type.GetType(type.FullName.Replace("[]", string.Empty));
+                }
+
+                var array = c as Array;
+                Array copied = Array.CreateInstance(elementType, array.Length);
+
+                for (int i = 0; i < array.Length; i++)
+                {
+                    object item = null;
+                    Utils.Clone(ref item, array.GetValue(i));
+                    //object item = Utils.Clone(array.GetValue(i));
+
+                    copied.SetValue(item, i);
+                }
+
+                if (o == null)
+                {
+                    o = (T) Convert.ChangeType(copied, type);
+                }
+            }
+            else if (Utils.IsArrayType(type))
+            {
+                Type elementType = type.GetElementType();
+
+                if (elementType == null)
+                {
+                    elementType = Type.GetType(type.FullName.Replace("[]", string.Empty));
+                }
+
+                var array = c as IList;
+                o = (T)Activator.CreateInstance(type);
+
+                for (int i = 0; i < array.Count; i++)
+                {
+                    object item = null;
+                    Utils.Clone(ref item, array[i]);
+
+                    ((IList)o).Add(item);
+                }
+
+            }
+            else
+            {
+                bool isClass = type.IsClass;
+
+                if (isClass && Utils.IsRefNullType(type))
+                {
+                    o = c;
+                }
+                else
+                {
+                    Debug.Check(!type.IsPrimitive && !type.IsEnum);
+
+                    bool isStruct = type.IsValueType;
+
+                    if (o == null)
+                    {
+                        o = (T)Activator.CreateInstance(type);
+                    }
+
+                    if (isStruct || isClass)
+                    {
+                        FieldInfo[] fields = type.GetFields(BindingFlags.DeclaredOnly | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static);
+
+                        for (int i = 0; i < fields.Length; ++i)
+                        {
+                            FieldInfo f = fields[i];
+
+                            if (!f.IsLiteral)
+                            {
+                                object fv = f.GetValue(c);
+                                object fv2 = null;
+                                Utils.Clone(ref fv2 , fv);
+
+                                f.SetValue(o, fv2);
+                            }
+                        }
+
+                    }
+                    else
+                    {
+                        o = c;
+                    }
+                }
+            }
+        }
     }
 
     static public class Debug
     {
-		[Conditional("BEHAVIAC_DEBUG")]
+        [Conditional("BEHAVIAC_DEBUG")]
         [Conditional("UNITY_EDITOR")]
         public static void CheckEqual<T>(T l, T r)
         {
@@ -1181,7 +1864,7 @@ namespace behaviac
             }
         }
 
-		[Conditional("BEHAVIAC_DEBUG")]
+        [Conditional("BEHAVIAC_DEBUG")]
         [Conditional("UNITY_EDITOR")]
         public static void Check(bool b)
         {
@@ -1191,7 +1874,7 @@ namespace behaviac
             }
         }
 
-		[Conditional("BEHAVIAC_DEBUG")]
+        [Conditional("BEHAVIAC_DEBUG")]
         [Conditional("UNITY_EDITOR")]
         public static void Check(bool b, string message)
         {
@@ -1201,26 +1884,43 @@ namespace behaviac
             }
         }
 
-		[Conditional("BEHAVIAC_DEBUG")]
+        [Conditional("BEHAVIAC_DEBUG")]
+        [Conditional("UNITY_EDITOR")]
+        public static void Check(bool b, string format, object arg0)
+        {
+            if (!b)
+            {
+                string message = string.Format(format, arg0);
+                Break(message);
+            }
+        }
+
+        [Conditional("BEHAVIAC_DEBUG")]
         [Conditional("UNITY_EDITOR")]
         public static void Log(string message)
         {
             UnityEngine.Debug.Log(message);
         }
 
-		[Conditional("UNITY_EDITOR")]
+        [Conditional("UNITY_EDITOR")]
         public static void LogWarning(string message)
         {
             UnityEngine.Debug.LogWarning(message);
         }
 
-		[Conditional("UNITY_EDITOR")]
+        [Conditional("UNITY_EDITOR")]
         public static void LogError(string message)
         {
             UnityEngine.Debug.LogError(message);
         }
 
-		[Conditional("BEHAVIAC_DEBUG")]
+        [Conditional("UNITY_EDITOR")]
+        public static void LogError(Exception ex)
+        {
+            UnityEngine.Debug.LogError(ex.Message);
+        }
+
+        [Conditional("BEHAVIAC_DEBUG")]
         [Conditional("UNITY_EDITOR")]
         public static void Break(string msg)
         {
@@ -1233,10 +1933,12 @@ namespace behaviac
     }
 
     #region Detail
+
     static public class Details
     {
         #region Impl
-        class CompareValue<T> where T : struct, IComparable<T>
+
+        private class CompareValue<T> where T : struct, IComparable<T>
         {
             public static bool Greater(object lhs, object rhs)
             {
@@ -1259,7 +1961,7 @@ namespace behaviac
             }
         }
 
-        interface ICompareValue
+        private interface ICompareValue
         {
             bool Greater(object lhs, object rhs);
 
@@ -1270,7 +1972,7 @@ namespace behaviac
             bool LessEqual(object lhs, object rhs);
         }
 
-        class CompareValueInt : ICompareValue
+        private class CompareValueInt : ICompareValue
         {
             public bool Greater(object lhs, object rhs)
             {
@@ -1293,7 +1995,7 @@ namespace behaviac
             }
         }
 
-        class CompareValueLong : ICompareValue
+        private class CompareValueLong : ICompareValue
         {
             public bool Greater(object lhs, object rhs)
             {
@@ -1316,7 +2018,7 @@ namespace behaviac
             }
         }
 
-        class CompareValueShort : ICompareValue
+        private class CompareValueShort : ICompareValue
         {
             public bool Greater(object lhs, object rhs)
             {
@@ -1339,7 +2041,7 @@ namespace behaviac
             }
         }
 
-        class CompareValueByte : ICompareValue
+        private class CompareValueByte : ICompareValue
         {
             public bool Greater(object lhs, object rhs)
             {
@@ -1362,7 +2064,7 @@ namespace behaviac
             }
         }
 
-        class CompareValueFloat : ICompareValue
+        private class CompareValueFloat : ICompareValue
         {
             public bool Greater(object lhs, object rhs)
             {
@@ -1385,7 +2087,7 @@ namespace behaviac
             }
         }
 
-        class CompareValueUInt : ICompareValue
+        private class CompareValueUInt : ICompareValue
         {
             public bool Greater(object lhs, object rhs)
             {
@@ -1408,7 +2110,7 @@ namespace behaviac
             }
         }
 
-        class CompareValueULong : ICompareValue
+        private class CompareValueULong : ICompareValue
         {
             public bool Greater(object lhs, object rhs)
             {
@@ -1431,7 +2133,7 @@ namespace behaviac
             }
         }
 
-        class CompareValueUShort : ICompareValue
+        private class CompareValueUShort : ICompareValue
         {
             public bool Greater(object lhs, object rhs)
             {
@@ -1454,7 +2156,7 @@ namespace behaviac
             }
         }
 
-        class CompareValueUByte : ICompareValue
+        private class CompareValueUByte : ICompareValue
         {
             public bool Greater(object lhs, object rhs)
             {
@@ -1477,7 +2179,7 @@ namespace behaviac
             }
         }
 
-        class CompareValueDouble : ICompareValue
+        private class CompareValueDouble : ICompareValue
         {
             public bool Greater(object lhs, object rhs)
             {
@@ -1499,8 +2201,9 @@ namespace behaviac
                 return ((double)lhs) <= ((double)rhs);
             }
         }
+
         ///
-        interface IComputeValue
+        private interface IComputeValue
         {
             object Add(object opr1, object opr2);
 
@@ -1511,7 +2214,7 @@ namespace behaviac
             object Div(object opr1, object opr2);
         }
 
-        class ComputeValueInt : IComputeValue
+        private class ComputeValueInt : IComputeValue
         {
             public object Add(object lhs, object rhs)
             {
@@ -1538,7 +2241,7 @@ namespace behaviac
             }
         }
 
-        class ComputeValueLong : IComputeValue
+        private class ComputeValueLong : IComputeValue
         {
             public object Add(object lhs, object rhs)
             {
@@ -1565,7 +2268,7 @@ namespace behaviac
             }
         }
 
-        class ComputeValueShort : IComputeValue
+        private class ComputeValueShort : IComputeValue
         {
             public object Add(object lhs, object rhs)
             {
@@ -1592,7 +2295,7 @@ namespace behaviac
             }
         }
 
-        class ComputeValueByte : IComputeValue
+        private class ComputeValueByte : IComputeValue
         {
             public object Add(object lhs, object rhs)
             {
@@ -1619,7 +2322,7 @@ namespace behaviac
             }
         }
 
-        class ComputeValueFloat : IComputeValue
+        private class ComputeValueFloat : IComputeValue
         {
             public object Add(object lhs, object rhs)
             {
@@ -1646,7 +2349,7 @@ namespace behaviac
             }
         }
 
-        class ComputeValueUInt : IComputeValue
+        private class ComputeValueUInt : IComputeValue
         {
             public object Add(object lhs, object rhs)
             {
@@ -1673,7 +2376,7 @@ namespace behaviac
             }
         }
 
-        class ComputeValueULong : IComputeValue
+        private class ComputeValueULong : IComputeValue
         {
             public object Add(object lhs, object rhs)
             {
@@ -1700,7 +2403,7 @@ namespace behaviac
             }
         }
 
-        class ComputeValueUShort : IComputeValue
+        private class ComputeValueUShort : IComputeValue
         {
             public object Add(object lhs, object rhs)
             {
@@ -1727,7 +2430,7 @@ namespace behaviac
             }
         }
 
-        class ComputeValueUByte : IComputeValue
+        private class ComputeValueUByte : IComputeValue
         {
             public object Add(object lhs, object rhs)
             {
@@ -1754,7 +2457,7 @@ namespace behaviac
             }
         }
 
-        class ComputeValueDouble : IComputeValue
+        private class ComputeValueDouble : IComputeValue
         {
             public object Add(object lhs, object rhs)
             {
@@ -1780,13 +2483,15 @@ namespace behaviac
                 return r;
             }
         }
-       
+
         #endregion Impl
 
-        static Dictionary<Type, ICompareValue> ms_comparers = null;
+        private static Dictionary<Type, ICompareValue> ms_comparers = null;
 
         public static void RegisterCompareValue()
         {
+            Debug.Check(ms_comparers == null);
+
             ms_comparers = new Dictionary<Type, ICompareValue>();
 
             ms_comparers[typeof(int)] = new CompareValueInt();
@@ -1802,9 +2507,11 @@ namespace behaviac
             ms_comparers[typeof(double)] = new CompareValueDouble();
         }
 
-        public static bool Equal(object lhs, object rhs)
+        public static bool Equals_(object lhs, object rhs)
         {
             return System.Object.Equals(lhs, rhs);
+            //return ((lhs == rhs) ||
+            //    (((lhs != null) && (rhs != null)) && lhs.Equals(rhs)));
         }
 
         public static bool Greater(object lhs, object rhs)
@@ -1813,10 +2520,16 @@ namespace behaviac
             Type lhs_t = lhs.GetType();
             Debug.Check(lhs_t == rhs.GetType());
             Debug.Check(ms_comparers != null);
+
             if (ms_comparers.ContainsKey(lhs_t))
             {
                 ICompareValue d = ms_comparers[lhs_t];
                 return d.Greater(lhs, rhs);
+
+            }
+            else
+            {
+                Debug.Check(false);
             }
 
             return false;
@@ -1827,10 +2540,16 @@ namespace behaviac
             Debug.Check(lhs != null && rhs != null);
             Type lhs_t = lhs.GetType();
             Debug.Check(lhs_t == rhs.GetType());
+
             if (ms_comparers.ContainsKey(lhs_t))
             {
                 ICompareValue d = ms_comparers[lhs_t];
                 return d.GreaterEqual(lhs, rhs);
+
+            }
+            else
+            {
+                Debug.Check(false);
             }
 
             return false;
@@ -1841,10 +2560,16 @@ namespace behaviac
             Debug.Check(lhs != null && rhs != null);
             Type lhs_t = lhs.GetType();
             Debug.Check(lhs_t == rhs.GetType());
+
             if (ms_comparers.ContainsKey(lhs_t))
             {
                 ICompareValue d = ms_comparers[lhs_t];
                 return d.Less(lhs, rhs);
+
+            }
+            else
+            {
+                Debug.Check(false);
             }
 
             return false;
@@ -1855,16 +2580,22 @@ namespace behaviac
             Debug.Check(lhs != null && rhs != null);
             Type lhs_t = lhs.GetType();
             Debug.Check(lhs_t == rhs.GetType());
+
             if (ms_comparers.ContainsKey(lhs_t))
             {
                 ICompareValue d = ms_comparers[lhs_t];
                 return d.LessEqual(lhs, rhs);
+
+            }
+            else
+            {
+                Debug.Check(false);
             }
 
             return false;
         }
 
-        static Dictionary<Type, IComputeValue> ms_computers = null;
+        private static Dictionary<Type, IComputeValue> ms_computers = null;
 
         public static void RegisterComputeValue()
         {
@@ -1889,6 +2620,7 @@ namespace behaviac
             Type lhs_t = value1.GetType();
             Debug.Check(lhs_t == value2.GetType());
             Debug.Check(ms_computers != null);
+
             if (ms_computers.ContainsKey(lhs_t))
             {
                 IComputeValue d = ms_computers[lhs_t];
@@ -1897,20 +2629,36 @@ namespace behaviac
                 {
                     case EComputeOperator.E_ADD:
                         return d.Add(value1, value2);
+
                     case EComputeOperator.E_SUB:
                         return d.Sub(value1, value2);
+
                     case EComputeOperator.E_MUL:
                         return d.Mul(value1, value2);
+
                     case EComputeOperator.E_DIV:
                         return d.Div(value1, value2);
+
+                    default:
+                        Debug.Check(false);
+                        break;
                 }
             }
 
             return null;
         }
+
+        public static void Cleanup()
+        {
+            ms_comparers.Clear();
+            ms_comparers = null;
+
+            ms_computers.Clear();
+            ms_computers = null;
+        }
     }
 
-    #endregion
+    #endregion Detail
 
     //public static class ListExtra
     //{
@@ -1940,11 +2688,13 @@ namespace behaviac
             {
                 int depth = 0;
                 int pos = indexBracketBegin;
+
                 while (pos < src.Length)
                 {
                     if (src[pos] == '{')
                     {
                         depth++;
+
                     }
                     else if (src[pos] == '}')
                     {
@@ -1966,9 +2716,11 @@ namespace behaviac
             object objValue = Activator.CreateInstance(type);
             Dictionary<string, FieldInfo> structMembers = new Dictionary<string, FieldInfo>();
             FieldInfo[] fields = type.GetFields(BindingFlags.DeclaredOnly | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static);
+
             for (int i = 0; i < fields.Length; ++i)
             {
                 FieldInfo f = fields[i];
+
                 if (!f.IsLiteral)
                 {
                     structMembers.Add(f.Name, f);
@@ -1989,6 +2741,7 @@ namespace behaviac
             //{color=0;id=;type={bLive=false;name=0;weight=0;};}
             int posBegin = 1;
             int posEnd = src.IndexOf(';', posBegin);
+
             while (posEnd != -1)
             {
                 Debug.Check(src[posEnd] == ';');
@@ -2003,10 +2756,12 @@ namespace behaviac
                     string memmberName = src.Substring(posBegin, length);
                     string memberValueStr;
                     char c = src[posEqual + 1];
+
                     if (c != '{')
                     {
                         length = posEnd - posEqual - 1;
                         memberValueStr = src.Substring(posEqual + 1, length);
+
                     }
                     else
                     {
@@ -2034,6 +2789,7 @@ namespace behaviac
 
                 //{color=0;id=;type={bLive=false;name=0;weight=0;};}
                 posEnd = src.IndexOf(';', posBegin);
+
                 if (posEnd > posCloseBrackets)
                 {
                     break;
@@ -2060,12 +2816,15 @@ namespace behaviac
 
             int b = semiColon + 1;
             int sep = b;
+
             if (b < src.Length && src[b] == '{')
             {
                 sep = SkipPairedBrackets(src, b);
                 Debug.Check(sep != -1);
             }
+
             sep = src.IndexOf('|', sep);
+
             while (sep != -1)
             {
                 int len = sep - b;
@@ -2075,10 +2834,12 @@ namespace behaviac
                 objVector.Add(elemObject);
 
                 b = sep + 1;
+
                 if (b < src.Length && src[b] == '{')
                 {
                     sep = SkipPairedBrackets(src, b);
                     Debug.Check(b != -1);
+
                 }
                 else
                 {
@@ -2102,11 +2863,21 @@ namespace behaviac
             return objVector;
         }
 
+        public static bool IsValidString(string str)
+        {
+            if (string.IsNullOrEmpty(str) || (str[0] == '\"' && str[1] == '\"'))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
         public static object FromString(Type type, string valStr, bool bStrIsArrayType /*= false*/)
         {
             if (!string.IsNullOrEmpty(valStr) && valStr == "null")
             {
-				Debug.Check(Utils.IsNullValueType(type));
+                Debug.Check(Utils.IsRefNullType(type));
                 return null;
             }
 
@@ -2126,24 +2897,28 @@ namespace behaviac
                 {
                     Type elemType = type.GetGenericArguments()[0];
                     v = StringUtils.FromStringVector(elemType, valStr);
+
                 }
                 else
                 {
                     v = StringUtils.FromStringVector(type, valStr);
                 }
+
             }
             else if (type == typeof(behaviac.Property))
             {
                 v = Condition.LoadProperty(valStr);
+
             }
             else if (Utils.IsCustomClassType(type))
             {
-				Debug.Check(!Utils.IsNullValueType(type));
+                Debug.Check(!Utils.IsRefNullType(type));
                 v = StringUtils.FromStringStruct(type, valStr);
+
             }
             else
             {
-				v = Utils.GetValueFromString(type, valStr);
+                v = Utils.FromStringPrimitive(type, valStr);
             }
 
             return v;
@@ -2152,6 +2927,7 @@ namespace behaviac
         public static string ToString(object value)
         {
             string valueStr = "";
+
             if (value != null)
             {
                 Type type = value.GetType();
@@ -2176,18 +2952,22 @@ namespace behaviac
                         string eStrLast = StringUtils.ToString(eLast);
                         valueStr += string.Format("{0}", eStrLast);
                     }
+
                 }
                 else if (Utils.IsCustomClassType(type))
                 {
-					bool bIsNullValueType = Utils.IsNullValueType(type);
-					if (bIsNullValueType)
+                    bool bIsNullValueType = Utils.IsRefNullType(type);
+
+                    if (bIsNullValueType)
                     {
                         valueStr = string.Format("{0:x08}", value.GetHashCode());
+
                     }
                     else
                     {
                         valueStr = "{";
                         FieldInfo[] fields = type.GetFields(BindingFlags.DeclaredOnly | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static);
+
                         for (int i = 0; i < fields.Length; ++i)
                         {
                             FieldInfo f = fields[i];
@@ -2195,20 +2975,22 @@ namespace behaviac
                             string mStr = StringUtils.ToString(m);
                             valueStr += string.Format("{0}={1};", f.Name, mStr);
                         }
+
                         valueStr += "}";
                     }
+
                 }
                 else
                 {
                     valueStr = value.ToString();
                 }
+
             }
             else
             {
                 valueStr = "null";
             }
 
-            
             return valueStr;
         }
 
@@ -2237,6 +3019,72 @@ namespace behaviac
             return -1;
         }
 
+        public static List<string> SplitTokens(string str)
+        {
+            List<string> ret = new List<string>();
+            //"int Self.AgentArrayAccessTest::ListInts[int Self.AgentArrayAccessTest::l_index]"
+            int pB = 0;
+            int i = 0;
+
+            bool bBeginIndex = false;
+
+            while (i < str.Length)
+            {
+                bool bFound = false;
+                char c = str[i];
+
+                if (c == ' ' && !bBeginIndex)
+                {
+                    bFound = true;
+
+                }
+                else if (c == '[')
+                {
+                    bBeginIndex = true;
+                    bFound = true;
+
+                }
+                else if (c == ']')
+                {
+                    bBeginIndex = false;
+                    bFound = true;
+                }
+
+                if (bFound)
+                {
+                    string strT = ReadToken(str, pB, i);
+                    Debug.Check(strT.Length > 0);
+                    ret.Add(strT);
+
+                    pB = i + 1;
+                }
+
+                i++;
+            }
+
+            string t = ReadToken(str, pB, i);
+
+            if (t.Length > 0)
+            {
+                ret.Add(t);
+            }
+
+            return ret;
+        }
+
+        private static string ReadToken(string str, int pB, int end)
+        {
+            string strT = "";
+            int p = pB;
+
+            while (p < end)
+            {
+                strT += str[p++];
+            }
+
+            return strT;
+        }
+
         public static bool ParseForStruct(Type type, string str, ref string strT, Dictionary<string, Property> props)
         {
             int pB = 0;
@@ -2245,21 +3093,25 @@ namespace behaviac
             while (i < str.Length)
             {
                 char c = str[i];
+
                 if (c == ';' || c == '{' || c == '}')
                 {
                     int p = pB;
+
                     while (p <= i)
                     {
                         strT += str[p++];
                     }
 
                     pB = i + 1;
+
                 }
                 else if (c == ' ')
                 {
                     //par or property
                     string propName = "";
                     int p = pB;
+
                     while (str[p] != '=')
                     {
                         propName += str[p++];
@@ -2270,12 +3122,14 @@ namespace behaviac
                     p++;
 
                     string typeStr = "";
+
                     while (str[p] != ' ')
                     {
                         typeStr += str[p++];
                     }
 
                     bool bStatic = false;
+
                     if (typeStr == "static")
                     {
                         //skip ' '
@@ -2301,8 +3155,7 @@ namespace behaviac
                         parName += str[i++];
                     }
 
-                    props[propName] = behaviac.Property.Create(typeStr, parName, null, bStatic, false);
-                    ;
+                    props[propName] = behaviac.Property.Create(typeStr, parName, bStatic, null);
 
                     //skip ';'
                     Debug.Check(str[i] == ';');

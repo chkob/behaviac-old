@@ -35,10 +35,19 @@ namespace PluginBehaviac.Nodes
         }
 
         protected VariableDef _time = new VariableDef((int)0);
-        [DesignerPropertyEnum("DecoratorTime", "DecoratorTimeDesc", "CategoryBasic", DesignerProperty.DisplayMode.Parameter, 0, DesignerProperty.DesignerFlags.NoFlags, DesignerPropertyEnum.AllowStyles.ConstAttributes, "", "")]
+        [DesignerPropertyEnum("DecoratorTime", "DecoratorTimeDesc", "CategoryBasic", DesignerProperty.DisplayMode.Parameter, 0, DesignerProperty.DesignerFlags.NoFlags, DesignerPropertyEnum.AllowStyles.ConstAttributes, "", "", ValueTypes.Int)]
         public VariableDef Time
         {
-            get { return _time; }
+            get
+            {
+                if ((_time == null) || (_time.IsConst && _time.Value == null))
+                {
+                    _time = new VariableDef((int)0);
+                }
+
+                return _time;
+            }
+
             set { this._time = value; }
         }
 

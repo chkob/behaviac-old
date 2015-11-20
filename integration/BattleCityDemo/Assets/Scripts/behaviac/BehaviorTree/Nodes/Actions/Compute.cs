@@ -11,8 +11,6 @@
 // See the License for the specific language governing permissions and limitations under the License.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections;
 using System.Collections.Generic;
 
 namespace behaviac
@@ -26,275 +24,225 @@ namespace behaviac
         E_DIV
     }
 
-    public class Compute : BehaviorNode
+public class Compute : BehaviorNode
     {
         public Compute()
-        {
-		}
-        ~Compute()
-        {
-            m_opl = null;
-            m_opr1 = null;
-            m_opr1_m = null;
-            m_opr2 = null;
-            m_opr2_m = null;
-        }
+    {
+    }
 
-        protected override void load(int version, string agentType, List<property_t> properties)
+    ~Compute()
+    {
+        m_opl = null;
+        m_opr1 = null;
+        m_opr1_m = null;
+        m_opr2 = null;
+        m_opr2_m = null;
+    }
+
+    protected override void load(int version, string agentType, List<property_t> properties)
+    {
+        base.load(version, agentType, properties);
+
+        foreach(property_t p in properties)
         {
-            base.load(version, agentType, properties);
-
-            string propertyName = null;
-
-            foreach (property_t p in properties)
+            if (p.name == "Opl")
             {
-                if (p.name == "Opl")
+                this.m_opl = Condition.LoadLeft(p.value);
+
+            }
+            else if (p.name == "Operator")
+            {
+                if (p.value == "Add")
                 {
-                    this.m_opl = Condition.LoadLeft(p.value, ref propertyName, null);
+                    this.m_operator = EComputeOperator.E_ADD;
+
                 }
-                else if (p.name == "Operator")
+                else if (p.value == "Sub")
                 {
-                    if (p.value == "Add")
-                    {
-                        this.m_operator = EComputeOperator.E_ADD;
-                    }
-                    else if (p.value == "Sub")
-                    {
-                        this.m_operator = EComputeOperator.E_SUB;
-                    }
-                    else if (p.value == "Mul")
-                    {
-                        this.m_operator = EComputeOperator.E_MUL;
-                    }
-                    else if (p.value == "Div")
-                    {
-                        this.m_operator = EComputeOperator.E_DIV;
-                    }
-                    else
-                    {
-                        Debug.Check(false);
-                    }
+                    this.m_operator = EComputeOperator.E_SUB;
+
                 }
-                else if (p.name == "Opr1")
+                else if (p.value == "Mul")
                 {
-                    int pParenthesis = p.value.IndexOf('(');
-                    if (pParenthesis == -1)
-                    {
-                        string typeName = null;
-                        this.m_opr1 = Condition.LoadRight(p.value, propertyName, ref typeName);
-                    }
-                    else
-                    {
-                        //method
-                        this.m_opr1_m = Action.LoadMethod(p.value);
-                    }
+                    this.m_operator = EComputeOperator.E_MUL;
+
                 }
-                else if (p.name == "Opr2")
+                else if (p.value == "Div")
                 {
-                    int pParenthesis = p.value.IndexOf('(');
-                    if (pParenthesis == -1)
-                    {
-                        string typeName = null;
-                        this.m_opr2 = Condition.LoadRight(p.value, propertyName, ref typeName);
-                    }
-                    else
-                    {
-                        //method
-                        this.m_opr2_m = Action.LoadMethod(p.value);
-                    }
+                    this.m_operator = EComputeOperator.E_DIV;
+
                 }
                 else
                 {
-                    //Debug.Check(0, "unrecognised property %s", p.name);
+                    Debug.Check(false);
                 }
+
             }
-        }
-
-        public override bool IsValid(Agent pAgent, BehaviorTask pTask)
-        {
-            if (!(pTask.GetNode() is Compute))
+            else if (p.name == "Opr1")
             {
-                return false;
-            }
+                int pParenthesis = p.value.IndexOf('(');
 
-            return base.IsValid(pAgent, pTask);
-        }
-
-        protected override BehaviorTask createTask()
-        {
-            return new ComputeTask();
-        }
-
-        protected Property m_opl;
-        protected Property m_opr1;
-        protected CMethodBase m_opr1_m;
-        protected Property m_opr2;
-        protected CMethodBase m_opr2_m;
-        protected EComputeOperator m_operator = EComputeOperator.E_INVALID;
-
-        class ComputeTask : LeafTask
-        {
-            public ComputeTask()
-            {
-			}
-
-            ~ComputeTask()
-            {
-            }
-
-            public override void copyto(BehaviorTask target)
-            {
-                base.copyto(target);
-            }
-
-            public override void save(ISerializableNode node)
-            {
-                base.save(node);
-            }
-            public override void load(ISerializableNode node)
-            {
-                base.load(node);
-            }
-
-            protected override bool isContinueTicking()
-            {
-                return false;
-            }
-
-            protected override bool onenter(Agent pAgent)
-            {
-                return true;
-            }
-            protected override void onexit(Agent pAgent, EBTStatus s)
-            {
-            }
-
-            protected override EBTStatus update(Agent pAgent, EBTStatus childStatus)
-            {
-                EBTStatus result = EBTStatus.BT_SUCCESS;
-
-                Debug.Check(this.GetNode() is Compute);
-                Compute pComputeNode = (Compute)(this.GetNode());
-
-                bool bValid = false;
-                object value1 = null;
-
-                if (pComputeNode.m_opl != null)
+                if (pParenthesis == -1)
                 {
-                    if (pComputeNode.m_opr1_m != null)
-                    {
-                        bValid = true;
-                        ParentType pt = pComputeNode.m_opr1_m.GetParentType();
-                        Agent pParent = pAgent;
-                        if (pt == ParentType.PT_INSTANCE)
-                        {
-                            pParent = Agent.GetInstance(pComputeNode.m_opr1_m.GetInstanceNameString(), pParent.GetContextId());
-							Debug.Check(pParent != null || Utils.IsStaticClass(pComputeNode.m_opr1_m.GetInstanceNameString()));
-                        }
+                    string typeName = null;
+                    this.m_opr1 = Condition.LoadRight(p.value, ref typeName);
 
-                        value1 = pComputeNode.m_opr1_m.run(pParent, pAgent);
-                    }
-                    else if (pComputeNode.m_opr1 != null)
-                    {
-                        bValid = true;
-                        Agent pParentL = pAgent;
-                        Agent pParentR = pAgent;
-
-                        {
-                            ParentType pt = pComputeNode.m_opl.GetParentType();
-                            if (pt == ParentType.PT_INSTANCE)
-                            {
-                                pParentL = Agent.GetInstance(pComputeNode.m_opl.GetInstanceNameString(), pParentL.GetContextId());
-								Debug.Check(pParentL != null || Utils.IsStaticClass(pComputeNode.m_opl.GetInstanceNameString()));
-                            }
-                        }
-                        {
-                            ParentType pt = pComputeNode.m_opr1.GetParentType();
-                            if (pt == ParentType.PT_INSTANCE)
-                            {
-                                pParentR = Agent.GetInstance(pComputeNode.m_opr1.GetInstanceNameString(), pParentR.GetContextId());
-
-                                //it is a const
-                                if (pParentR == null)
-                                {
-                                    pParentR = pParentL;
-                                }
-                            }
-                        }
-
-                        pComputeNode.m_opl.SetFrom(pParentR, pComputeNode.m_opr1, pParentL);
-
-                        value1 = pComputeNode.m_opl.GetValue(pParentL);
-                    }
-
-                    if (pComputeNode.m_opr2_m != null)
-                    {
-                        bValid = true;
-                        ParentType pt = pComputeNode.m_opr2_m.GetParentType();
-                        Agent pParent = pAgent;
-                        if (pt == ParentType.PT_INSTANCE)
-                        {
-                            pParent = Agent.GetInstance(pComputeNode.m_opr2_m.GetInstanceNameString(), pParent.GetContextId());
-							Debug.Check(pParent != null || Utils.IsStaticClass(pComputeNode.m_opr2_m.GetInstanceNameString()));
-                        }
-
-                        object value2 = pComputeNode.m_opr2_m.run(pParent, pAgent);
-
-                        ParentType pt_opl = pComputeNode.m_opl.GetParentType();
-                        Agent pParentOpl = pAgent;
-                        if (pt_opl == ParentType.PT_INSTANCE)
-                        {
-                            pParentOpl = Agent.GetInstance(pComputeNode.m_opl.GetInstanceNameString(), pParentOpl.GetContextId());
-							Debug.Check(pParentOpl != null || Utils.IsStaticClass(pComputeNode.m_opl.GetInstanceNameString()));
-                        }
-
-                        object returnValue = Details.ComputeValue(value1, value2, pComputeNode.m_operator);
-
-                        pComputeNode.m_opl.SetValue(pParentOpl, returnValue);
-                    }
-                    else if (pComputeNode.m_opr2 != null)
-                    {
-                        bValid = true;
-                        Agent pParentL = pAgent;
-                        Agent pParentR = pAgent;
-
-                        {
-                            ParentType pt = pComputeNode.m_opl.GetParentType();
-                            if (pt == ParentType.PT_INSTANCE)
-                            {
-                                pParentL = Agent.GetInstance(pComputeNode.m_opl.GetInstanceNameString(), pParentL.GetContextId());
-								Debug.Check(pParentL != null || Utils.IsStaticClass(pComputeNode.m_opl.GetInstanceNameString()));
-                            }
-                        }
-                        {
-                            ParentType pt = pComputeNode.m_opr2.GetParentType();
-                            if (pt == ParentType.PT_INSTANCE)
-                            {
-                                pParentR = Agent.GetInstance(pComputeNode.m_opr2.GetInstanceNameString(), pParentR.GetContextId());
-
-                                //it is a const
-                                if (pParentR == null)
-                                {
-                                    pParentR = pParentL;
-                                }
-                            }
-                        }
-
-                        object value2 = pComputeNode.m_opr2.GetValue(pParentR);
-
-                        object returnValue = Details.ComputeValue(value1, value2, pComputeNode.m_operator);
-
-                        pComputeNode.m_opl.SetValue(pParentL, returnValue);
-                    }
                 }
-
-                if (!bValid)
+                else
                 {
-                    result = pComputeNode.update_impl(pAgent, childStatus);
+                    //method
+                    this.m_opr1_m = Action.LoadMethod(p.value);
                 }
 
-                return result;
+            }
+            else if (p.name == "Opr2")
+            {
+                int pParenthesis = p.value.IndexOf('(');
+
+                if (pParenthesis == -1)
+                {
+                    string typeName = null;
+                    this.m_opr2 = Condition.LoadRight(p.value, ref typeName);
+
+                }
+                else
+                {
+                    //method
+                    this.m_opr2_m = Action.LoadMethod(p.value);
+                }
+
+            }
+            else
+            {
+                //Debug.Check(0, "unrecognised property %s", p.name);
             }
         }
+    }
+
+    public static bool EvaluteCompute(Agent pAgent, Property opl, Property opr1, CMethodBase opr1_m, EComputeOperator opr, Property opr2, CMethodBase opr2_m)
+    {
+        bool bValid = false;
+        object value1 = null;
+
+        if (opl != null)
+        {
+            if (opr1_m != null)
+            {
+                bValid = true;
+                value1 = opr1_m.Invoke(pAgent);
+
+            }
+            else if (opr1 != null)
+            {
+                bValid = true;
+                Agent pParentR = opr1.GetParentAgent(pAgent);
+
+                value1 = opr1.GetValue(pParentR);
+            }
+
+            if (opr2_m != null)
+            {
+                bValid = true;
+                object value2 = opr2_m.Invoke(pAgent);
+
+                Agent pParentOpl = opl.GetParentAgent(pAgent);
+                object returnValue = Details.ComputeValue(value1, value2, opr);
+
+                opl.SetValue(pParentOpl, returnValue);
+
+            }
+            else if (opr2 != null)
+            {
+                bValid = true;
+                Agent pParentL = opl.GetParentAgent(pAgent);
+                Agent pParentR = opr2.GetParentAgent(pAgent);
+
+                object value2 = opr2.GetValue(pParentR);
+
+                object returnValue = Details.ComputeValue(value1, value2, opr);
+
+                opl.SetValue(pParentL, returnValue);
+            }
+        }
+
+        return bValid;
+    }
+
+    public override bool IsValid(Agent pAgent, BehaviorTask pTask)
+    {
+        if (!(pTask.GetNode() is Compute))
+        {
+            return false;
+        }
+
+        return base.IsValid(pAgent, pTask);
+    }
+
+    protected override BehaviorTask createTask()
+    {
+        return new ComputeTask();
+    }
+
+    protected Property m_opl;
+    protected Property m_opr1;
+    protected CMethodBase m_opr1_m;
+    protected Property m_opr2;
+    protected CMethodBase m_opr2_m;
+    protected EComputeOperator m_operator = EComputeOperator.E_INVALID;
+
+private class ComputeTask : LeafTask
+    {
+        public ComputeTask()
+    {
+    }
+
+    ~ComputeTask()
+    {
+    }
+
+    public override void copyto(BehaviorTask target)
+    {
+        base.copyto(target);
+    }
+
+    public override void save(ISerializableNode node)
+    {
+        base.save(node);
+    }
+
+    public override void load(ISerializableNode node)
+    {
+        base.load(node);
+    }
+
+    protected override bool onenter(Agent pAgent)
+    {
+        return true;
+    }
+
+    protected override void onexit(Agent pAgent, EBTStatus s)
+    {
+    }
+
+    protected override EBTStatus update(Agent pAgent, EBTStatus childStatus)
+    {
+        Debug.Check(childStatus == EBTStatus.BT_RUNNING);
+
+        EBTStatus result = EBTStatus.BT_SUCCESS;
+
+        Debug.Check(this.GetNode() is Compute);
+        Compute pComputeNode = (Compute)(this.GetNode());
+
+        bool bValid = Compute.EvaluteCompute(pAgent, pComputeNode.m_opl, pComputeNode.m_opr1, pComputeNode.m_opr1_m,
+                                             pComputeNode.m_operator, pComputeNode.m_opr2, pComputeNode.m_opr2_m);
+
+        if (!bValid)
+        {
+            result = pComputeNode.update_impl(pAgent, childStatus);
+        }
+
+        return result;
+    }
+    }
     }
 }

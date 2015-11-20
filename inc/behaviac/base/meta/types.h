@@ -11,8 +11,8 @@
 // See the License for the specific language governing permissions and limitations under the License.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#ifndef _BEHAVIAC_BASE_META_TYPES_H__INCLUDED
-#define _BEHAVIAC_BASE_META_TYPES_H__INCLUDED
+#ifndef _BEHAVIAC_BASE_META_TYPES_H_INCLUDED
+#define _BEHAVIAC_BASE_META_TYPES_H_INCLUDED
 
 #include "behaviac/base/base.h"
 #include "behaviac/base/core/assert_t.h"
@@ -35,6 +35,9 @@
 
 #include "behaviac/base/meta/isderived.h"
 #include "behaviac/base/meta/issame.h"
+#include "behaviac/base/meta/isvector.h"
+#include "behaviac/base/meta/ismap.h"
+#include "behaviac/base/meta/hasfunction.h"
 
 #define _BASETYPE_(T) typename behaviac::Meta::RemovePtr<typename behaviac::Meta::RemoveRef<T>::Result>::Result
 
@@ -45,51 +48,87 @@
 
 namespace behaviac
 {
-	class Agent;
-	
-	namespace Meta
-	{
+    class Agent;
 
-		template <typename T, bool bPtr>
-		class ParamTypeConverter
-		{
-		public:
-			typedef REAL_BASETYPE(T)		BaseType;
-			typedef POINTER_TYPE(T)			PointerType;
-		};
+    namespace Meta
+    {
+        template <typename T, bool bPtr>
+        class ParamTypeConverter
+        {
+        public:
+            typedef REAL_BASETYPE(T)		BaseType;
+            typedef POINTER_TYPE(T)			PointerType;
+        };
 
-		template <>
-		class ParamTypeConverter<const char*, true>
-		{
-		public:
-			typedef behaviac::string		BaseType;
-			typedef const char**			PointerType;
-		};
+        template <>
+        class ParamTypeConverter<const char*, true>
+        {
+        public:
+            typedef behaviac::string		BaseType;
+            typedef const char**			PointerType;
+        };
 
-		template<typename T>
-		struct ParamCalledType
-		{
-		private:
-			//can't remove const
-			typedef typename behaviac::Meta::RemovePtr<typename behaviac::Meta::RemoveRef<T>::Result>::Result		RealBaseType_t;
-			typedef typename behaviac::Meta::RefType<T>::Result												RefType_t;
-		public:
-			typedef typename behaviac::Meta::IfThenElse<behaviac::Meta::IsPtr<T>::Result, RefType_t, T>::Result Result;
-		};
+        template<typename T>
+        struct ParamCalledType
+        {
+        private:
+            //can't remove const
+            typedef typename behaviac::Meta::RemovePtr<typename behaviac::Meta::RemoveRef<T>::Result>::Result		RealBaseType_t;
+            typedef typename behaviac::Meta::RefType<T>::Result												RefType_t;
+        public:
+            typedef typename behaviac::Meta::IfThenElse<behaviac::Meta::IsPtr<T>::Result, RefType_t, T>::Result Result;
+        };
+
+        template <typename T>
+        struct IsAgent
+        {
+            typedef REAL_BASETYPE(T)		TBaseType;
+
+            enum
+            {
+                Result = behaviac::Meta::IsSame<behaviac::Agent, TBaseType>::Result || behaviac::Meta::IsDerived<behaviac::Agent, TBaseType>::Result
+            };
+        };
+
 
 		template <typename T>
-		struct IsAgent
+		struct TypeMapper
 		{
-			typedef REAL_BASETYPE(T)		TBaseType;
+			typedef T Type;
+		};
 
-			enum 
+		template <typename T, bool bHasFromString>
+		class IsRefTypeStruct
+		{
+		public:
+			enum
 			{
-				Result = behaviac::Meta::IsSame<behaviac::Agent, TBaseType>::Result || 
-					behaviac::Meta::IsDerived<behaviac::Agent, TBaseType>::Result
+				Result = 0
 			};
 		};
 
-	}//namespace Meta
+		template <typename T>
+		class IsRefTypeStruct<T, true>
+		{
+		public:
+			enum
+			{
+				Result = T::ms_bIsRefType
+			};
+		};
+
+		template <typename T>
+		struct IsRefType
+		{
+            typedef REAL_BASETYPE(T)						TBaseType;
+			typedef typename TypeMapper<TBaseType>::Type	MappedType;
+			enum
+			{
+				Result = behaviac::Meta::IsAgent<TBaseType>::Result || behaviac::Meta::IsRefTypeStruct<MappedType, behaviac::Meta::HasFromString<MappedType>::Result>::Result
+				//Result = behaviac::Meta::IsAgent<T>::Result || behaviac::Meta::IsRefTypeStruct<T, behaviac::Meta::HasFromString<T>::Result>::Result
+			};
+		};
+    }//namespace Meta
 }//namespace behaviac
 
 #define PARAM_BASETYPE(T)		typename behaviac::Meta::ParamTypeConverter<T, behaviac::Meta::IsPtr<T>::Result>::BaseType
@@ -98,40 +137,40 @@ namespace behaviac
 #define PARAM_CALLEDTYPE(T)	typename behaviac::Meta::ParamCalledType<T>::Result
 //////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////
-#define AGENT_PTR_TYPE(T) typename behaviac::Meta::IfThenElse<behaviac::Meta::IsAgent<T>::Result, PARAM_POINTERTYPE(T), T>::Result
-#define STORED_TYPE(T) typename behaviac::Meta::IfThenElse<behaviac::Meta::IsPtr<T>::Result, T, AGENT_PTR_TYPE(T)>::Result
+#define _REF_TYPE_(T) typename behaviac::Meta::IfThenElse<behaviac::Meta::IsRefType<T>::Result, PARAM_POINTERTYPE(T), T>::Result
+#define STORED_TYPE(T) typename behaviac::Meta::IfThenElse<behaviac::Meta::IsPtr<T>::Result, T, _REF_TYPE_(T)>::Result
 
 template<typename T, bool bAgent, bool bPtr>
 struct GetValueSelector
 {
-	typedef STORED_TYPE(T) StoredType_t;
+    typedef STORED_TYPE(T) StoredType_t;
 
-	static const T& GetValue(const StoredType_t& v)
-	{
-		return v;
-	}
+    static const T& GetValue(const StoredType_t& v)
+    {
+        return v;
+    }
 };
 
 template<typename T>
 struct GetValueSelector < T, true, false >
 {
-	typedef STORED_TYPE(T) StoredType_t;
+    typedef STORED_TYPE(T) StoredType_t;
 
-	static const T& GetValue(const StoredType_t& v)
-	{
-		return *v;
-	}
+    static const T& GetValue(const StoredType_t& v)
+    {
+        return *v;
+    }
 };
 
 template<typename T>
 struct GetValueSelector < T, true, true >
 {
-	typedef STORED_TYPE(T) StoredType_t;
+    typedef STORED_TYPE(T) StoredType_t;
 
-	static const T& GetValue(const StoredType_t& v)
-	{
-		return v;
-	}
+    static const T& GetValue(const StoredType_t& v)
+    {
+        return v;
+    }
 };
 
-#endif//_BEHAVIAC_BASE_META_TYPES_H__INCLUDED
+#endif//_BEHAVIAC_BASE_META_TYPES_H_INCLUDED

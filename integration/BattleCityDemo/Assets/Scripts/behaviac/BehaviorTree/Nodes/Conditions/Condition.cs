@@ -11,31 +11,12 @@
 // See the License for the specific language governing permissions and limitations under the License.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections;
 using System.Collections.Generic;
 
 namespace behaviac
 {
     public class Condition : ConditionBase
     {
-        public static bool Register<T>(string typeName)
-        {
-            return true;
-        }
-
-        public static void UnRegister<T>(string typeName)
-        {
-        }
-
-        public static void RegisterBasicTypes()
-        {
-        }
-
-        public static void UnRegisterBasicTypes()
-        {
-        }
-
         public Condition()
         {
         }
@@ -45,58 +26,37 @@ namespace behaviac
             m_opl = null;
             m_opr = null;
             m_opl_m = null;
+            m_opr_m = null;
             m_comparator = null;
         }
 
-        public static VariableComparator Create(string typeName, string comparionOperator, Property lhs, Property rhs)
+        public static VariableComparator Create(string comparionOperator, Property lhs, CMethodBase lhs_m, Property rhs, CMethodBase rhs_m)
         {
             E_VariableComparisonType comparisonType = VariableComparator.ParseComparisonType(comparionOperator);
 
-            //bool bAgentPtr = false;
-            //it might be par or the right value of condition/assignment
-            if (Agent.IsAgentClassName(typeName))
-            {
-                //bAgentPtr = true;
-                typeName = "void*";
-            }
-
-            VariableComparator pComparator = VariableComparator.Create(typeName, lhs, rhs);
+            VariableComparator pComparator = VariableComparator.Create(lhs, lhs_m, rhs, rhs_m);
             pComparator.SetComparisonType(comparisonType);
 
             return pComparator;
         }
 
-        public static Property LoadLeft(string value, ref string propertyName, string constValue)
+        public static Property LoadLeft(string value)
         {
             Property opl = null;
 
             if (!string.IsNullOrEmpty(value))
             {
-                string[] tokens = value.Split(' ');
-
-                if (tokens != null && tokens.Length == 2)
-                {
-                    //int AgentTest::Property1
-                    string typeName = tokens[0].Replace("::", ".");
-                    propertyName = tokens[1];
-                    opl = Property.Create(typeName, tokens[1], constValue, false, false);
-                }
-                else
-                {
-                    //static int AgentTest::Property6
-                    Debug.Check(tokens[0] == "static");
-                    string typeName = tokens[1].Replace("::", ".");
-                    propertyName = tokens[2];
-                    opl = Property.Create(typeName, tokens[2], constValue, true, false);
-                }
+                string typeName = null;
+                opl = ParseProperty(value, ref typeName);
             }
 
             return opl;
         }
 
-        public static Property LoadRight(string value, string propertyName, ref string typeName)
+        public static Property LoadRight(string value, ref string typeName)
         {
             Property opr = null;
+
             if (!string.IsNullOrEmpty(value))
             {
                 if (value.StartsWith("const"))
@@ -109,26 +69,53 @@ namespace behaviac
                     typeName = typeName.Replace("::", ".");
 
                     string strVale = strRemaining.Substring(p + 1);
-                    opr = Property.Create(typeName, propertyName, strVale, false, true);
+                    opr = Property.Create(typeName, strVale);
+
                 }
                 else
                 {
-                    string[] tokens = value.Split(' ');
+                    opr = ParseProperty(value, ref typeName);
+                }
+            }
 
-                    if (tokens[0] == "static")
-                    {
-                        //static int Property1
-                        Debug.Check(tokens.Length == 3);
-                        typeName = tokens[1].Replace("::", ".");
-                        opr = Property.Create(typeName, tokens[2], null, true, false);
-                    }
-                    else
-                    {
-                        //int Property1
-                        Debug.Check(tokens.Length == 2);
-                        typeName = tokens[0].Replace("::", ".");
-                        opr = Property.Create(typeName, tokens[1], null, false, false);
-                    }
+            return opr;
+        }
+
+        public static Property ParseProperty(string value, ref string typeName)
+        {
+            Property opr = null;
+            List<string> tokens = StringUtils.SplitTokens(value);
+
+            if (tokens[0] == "static")
+            {
+                //static int Property1
+                typeName = tokens[1].Replace("::", ".");
+
+                if (tokens.Count == 3)
+                {
+                    opr = Property.Create(typeName, tokens[2], true, null);
+
+                }
+                else
+                {
+                    Debug.Check(tokens.Count == 4);
+                    opr = Property.Create(typeName, tokens[2], true, tokens[3]);
+                }
+
+            }
+            else
+            {
+                //int Property1
+                typeName = tokens[0].Replace("::", ".");
+
+                if (tokens.Count == 2)
+                {
+                    opr = Property.Create(typeName, tokens[1], false, null);
+
+                }
+                else
+                {
+                    opr = Property.Create(typeName, tokens[1], false, tokens[2]);
                 }
             }
 
@@ -137,10 +124,8 @@ namespace behaviac
 
         public static Property LoadProperty(string value)
         {
-            string propertyName = null;
             string typeName = null;
-
-            return LoadRight(value, propertyName, ref typeName);
+            return LoadRight(value, ref typeName);
         }
 
         protected override void load(int version, string agentType, List<property_t> properties)
@@ -148,31 +133,44 @@ namespace behaviac
             base.load(version, agentType, properties);
 
             string typeName = null;
-            string propertyName = null;
             string comparatorName = null;
 
-            foreach (property_t p in properties)
+            foreach(property_t p in properties)
             {
                 if (p.name == "Operator")
                 {
                     comparatorName = p.value;
+
                 }
                 else if (p.name == "Opl")
                 {
                     int pParenthesis = p.value.IndexOf('(');
+
                     if (pParenthesis == -1)
                     {
-                        this.m_opl = LoadLeft(p.value, ref propertyName, null);
+                        this.m_opl = LoadLeft(p.value);
+
                     }
                     else
                     {
-                        //method
                         this.m_opl_m = Action.LoadMethod(p.value);
                     }
+
                 }
                 else if (p.name == "Opr")
                 {
-                    this.m_opr = Condition.LoadRight(p.value, propertyName, ref typeName);
+                    int pParenthesis = p.value.IndexOf('(');
+
+                    if (pParenthesis == -1)
+                    {
+                        this.m_opr = LoadRight(p.value, ref typeName);
+
+                    }
+                    else
+                    {
+                        this.m_opr_m = Action.LoadMethod(p.value);
+                    }
+
                 }
                 else
                 {
@@ -180,9 +178,9 @@ namespace behaviac
                 }
             }
 
-            if (!string.IsNullOrEmpty(comparatorName) && (this.m_opl != null || this.m_opl_m != null) && this.m_opr != null)
+            if (!string.IsNullOrEmpty(comparatorName) && (this.m_opl != null || this.m_opl_m != null) && (this.m_opr != null || this.m_opr_m != null))
             {
-                this.m_comparator = Condition.Create(typeName, comparatorName, this.m_opl, this.m_opr);
+                this.m_comparator = Condition.Create(comparatorName, this.m_opl, this.m_opl_m, this.m_opr, this.m_opr_m);
             }
         }
 
@@ -196,6 +194,21 @@ namespace behaviac
             return base.IsValid(pAgent, pTask);
         }
 
+        public override bool Evaluate(Agent pAgent)
+        {
+            if (this.m_comparator != null)
+            {
+                return this.m_comparator.Execute(pAgent);
+
+            }
+            else
+            {
+                EBTStatus childStatus = EBTStatus.BT_INVALID;
+                EBTStatus result = this.update_impl(pAgent, childStatus);
+                return result == EBTStatus.BT_SUCCESS;
+            }
+        }
+
         protected override BehaviorTask createTask()
         {
             ConditionTask pTask = new ConditionTask();
@@ -203,61 +216,13 @@ namespace behaviac
             return pTask;
         }
 
-		public static bool DoCompare(Agent pAgent, VariableComparator comparator, Property opl, CMethodBase opl_m, Property opr)
-		{
-			bool bResult = false;
-			if (opl != null)
-			{
-				Agent agent_left = pAgent;
-				ParentType pt = opl.GetParentType();
-				if (pt == ParentType.PT_INSTANCE)
-				{
-					agent_left = Agent.GetInstance(opl.GetInstanceNameString(), agent_left.GetContextId());
-					Debug.Check(agent_left != null || Utils.IsStaticClass(opl.GetInstanceNameString()));
-				}
-				
-				Agent agent_right = pAgent;
-				pt = opr.GetParentType();
-				if (pt == ParentType.PT_INSTANCE)
-				{
-					agent_right = Agent.GetInstance(opr.GetInstanceNameString(), agent_left.GetContextId());
-					Debug.Check(agent_right != null || Utils.IsStaticClass(opr.GetInstanceNameString()));
-				}
-				
-				bResult = comparator.Execute(agent_left, agent_right);
-			}
-			else if (opl_m != null)
-			{
-				ParentType pt = opl_m.GetParentType();
-				Agent agent_left = pAgent;
-				if (pt == ParentType.PT_INSTANCE)
-				{
-					agent_left = Agent.GetInstance(opl_m.GetInstanceNameString(), agent_left.GetContextId());
-					Debug.Check(agent_left != null || Utils.IsStaticClass(opl_m.GetInstanceNameString()));
-				}
-				
-				object returnValue = opl_m.run(agent_left, pAgent);
-				
-				Agent agent_right = pAgent;
-				pt = opr.GetParentType();
-				if (pt == ParentType.PT_INSTANCE)
-				{
-					agent_right = Agent.GetInstance(opr.GetInstanceNameString(), agent_right.GetContextId());
-					Debug.Check(agent_right != null || Utils.IsStaticClass(opr.GetInstanceNameString()));
-				}
-
-				bResult = comparator.Execute(returnValue, agent_left, agent_right);
-			}
-			
-			return bResult;
-		}
-
         protected Property m_opl;
-        Property m_opr;
-        CMethodBase m_opl_m;
-        VariableComparator m_comparator;
+        private Property m_opr;
+        private CMethodBase m_opl_m;
+        private CMethodBase m_opr_m;
+        private VariableComparator m_comparator;
 
-        class ConditionTask : ConditionBaseTask
+        private class ConditionTask : ConditionBaseTask
         {
             public ConditionTask()
             {
@@ -271,10 +236,12 @@ namespace behaviac
             {
                 base.copyto(target);
             }
+
             public override void save(ISerializableNode node)
             {
                 base.save(node);
             }
+
             public override void load(ISerializableNode node)
             {
                 base.load(node);
@@ -284,30 +251,21 @@ namespace behaviac
             {
                 return true;
             }
+
             protected override void onexit(Agent pAgent, EBTStatus s)
             {
             }
 
             protected override EBTStatus update(Agent pAgent, EBTStatus childStatus)
             {
-                EBTStatus result = EBTStatus.BT_FAILURE;
+                Debug.Check(childStatus == EBTStatus.BT_RUNNING);
 
                 Debug.Check(this.GetNode() is Condition);
                 Condition pConditionNode = (Condition)(this.GetNode());
 
-                if (pConditionNode.m_comparator != null)
-                {
-                    if (DoCompare(pAgent, pConditionNode.m_comparator, pConditionNode.m_opl, pConditionNode.m_opl_m, pConditionNode.m_opr))
-                    {
-                        result = EBTStatus.BT_SUCCESS;
-                    }
-                }
-                else
-                {
-                    result = pConditionNode.update_impl(pAgent, childStatus);
-                }
+                bool ret = pConditionNode.Evaluate(pAgent);
 
-                return result;
+                return ret ? EBTStatus.BT_SUCCESS : EBTStatus.BT_FAILURE;
             }
         }
     }

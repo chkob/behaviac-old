@@ -11,8 +11,6 @@
 // See the License for the specific language governing permissions and limitations under the License.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections;
 using System.Collections.Generic;
 
 namespace behaviac
@@ -21,7 +19,8 @@ namespace behaviac
     {
         public SelectorLoop()
         {
-		}
+        }
+
         ~SelectorLoop()
         {
         }
@@ -41,6 +40,11 @@ namespace behaviac
             return base.IsValid(pAgent, pTask);
         }
 
+        public override bool IsManagingChildrenAsSubTrees()
+        {
+            return true;
+        }
+
         protected override BehaviorTask createTask()
         {
             SelectorLoopTask pTask = new SelectorLoopTask();
@@ -54,18 +58,19 @@ namespace behaviac
         // ============================================================================
         /**
         behavives similarly to SelectorTask, i.e. executing chidren until the first successful one.
-	
-        however, in the following ticks, it constantly monitors the higher priority nodes. 
-        if any one's precondtion node returns success, it picks it and execute it, and before executing, 
+
+        however, in the following ticks, it constantly monitors the higher priority nodes.
+        if any one's precondtion node returns success, it picks it and execute it, and before executing,
         it first cleans up the original executing one.
 
         all its children are WithPreconditionTask or its derivatives.
         */
+
         public class SelectorLoopTask : CompositeTask
         {
             public SelectorLoopTask()
             {
-			}
+            }
 
             ~SelectorLoopTask()
             {
@@ -120,18 +125,50 @@ namespace behaviac
                 base.onexit(pAgent, s);
             }
 
+            //no current task, as it needs to update every child for every update
+            protected override EBTStatus update_current(Agent pAgent, EBTStatus childStatus)
+            {
+                EBTStatus s = this.update(pAgent, childStatus);
+
+                return s;
+            }
+
             protected override EBTStatus update(Agent pAgent, EBTStatus childStatus)
             {
-                //checking the preconditions and take the first action tree
-                int index = (int)-1;
-                for (int i = 0; i < this.m_children.Count; ++i)
+                int idx = -1;
+
+                if (childStatus != EBTStatus.BT_RUNNING)
                 {
+                    Debug.Check(this.m_activeChildIndex != CompositeTask.InvalidChildIndex);
+
+                    if (childStatus == EBTStatus.BT_SUCCESS)
+                    {
+                        return EBTStatus.BT_SUCCESS;
+
+                    }
+                    else if (childStatus == EBTStatus.BT_FAILURE)
+                    {
+                        //the next for starts from (idx + 1), so that it starts from next one after this failed one
+                        idx = this.m_activeChildIndex;
+
+                    }
+                    else
+                    {
+                        Debug.Check(false);
+                    }
+                }
+
+                //checking the preconditions and take the first action tree
+                int index = (int) - 1;
+
+                for (int i = (idx + 1); i < this.m_children.Count; ++i)
+                {
+                    Debug.Check(this.m_children[i] is WithPreconditionTask);
                     WithPreconditionTask pSubTree = (WithPreconditionTask)this.m_children[i];
-                    Debug.Check(pSubTree is WithPreconditionTask);
 
-                    BehaviorTask pPrecondTree = pSubTree.PreconditionNode();
-
-                    EBTStatus status = pPrecondTree.exec(pAgent);
+                    pSubTree.IsUpdatePrecondition = true;
+                    EBTStatus status = pSubTree.exec(pAgent);
+                    pSubTree.IsUpdatePrecondition = false;
 
                     if (status == EBTStatus.BT_SUCCESS)
                     {
@@ -141,49 +178,27 @@ namespace behaviac
                 }
 
                 //clean up the current ticking action tree
-                if (index != (int)-1)
+                if (index != (int) - 1)
                 {
-                    if (this.m_activeChildIndex != CompositeTask.InvalidChildIndex)
+                    if (this.m_activeChildIndex != CompositeTask.InvalidChildIndex &&
+                        this.m_activeChildIndex != index)
                     {
                         WithPreconditionTask pCurrentSubTree = (WithPreconditionTask)this.m_children[this.m_activeChildIndex];
-                        Debug.Check(pCurrentSubTree is WithPreconditionTask);
-                        BehaviorTask pCurrentActionTree = pCurrentSubTree.Action();
+                        pCurrentSubTree.abort(pAgent);
 
-                        WithPreconditionTask pSubTree = (WithPreconditionTask)this.m_children[index];
-                        Debug.Check(pSubTree is WithPreconditionTask);
-
-                        BehaviorTask pActionTree = pSubTree.Action();
-
-                        if (pCurrentActionTree != pActionTree)
-                        {
-                            pCurrentActionTree.abort(pAgent);
-
-                            pCurrentSubTree.abort(pAgent);
-
-                            this.m_activeChildIndex = index;
-                        }
+                        //don't set it here
+                        //this.m_activeChildIndex = index;
                     }
 
-                    for (int i = 0; i < this.m_children.Count; ++i)
+                    for (int i = index; i < this.m_children.Count; ++i)
                     {
                         WithPreconditionTask pSubTree = (WithPreconditionTask)this.m_children[i];
-                        Debug.Check(pSubTree is WithPreconditionTask);
-
-                        //dummy ticking so that the designer knows it is updating
-                        EBTStatus statusDummy = pSubTree.exec(pAgent);
-                        Debug.Check(statusDummy == EBTStatus.BT_RUNNING);
-
-                        //when i < index, the precondition is failure, so to continue
-                        if (i < index)
-                        {
-                            continue;
-                        }
 
                         if (i > index)
                         {
-                            BehaviorTask pPreconditionTree = pSubTree.PreconditionNode();
-
-                            EBTStatus status = pPreconditionTree.exec(pAgent);
+                            pSubTree.IsUpdatePrecondition = true;
+                            EBTStatus status = pSubTree.exec(pAgent);
+                            pSubTree.IsUpdatePrecondition = false;
 
                             //to search for the first one whose precondition is success
                             if (status != EBTStatus.BT_SUCCESS)
@@ -192,37 +207,29 @@ namespace behaviac
                             }
                         }
 
-                        BehaviorTask pActionTree = pSubTree.Action();
+                        EBTStatus s = pSubTree.exec(pAgent);
 
-						EBTStatus s = pActionTree.exec(pAgent);
-
-						if (s == EBTStatus.BT_RUNNING)
+                        if (s == EBTStatus.BT_RUNNING)
                         {
-                            this.m_activeChildIndex = index;
+                            this.m_activeChildIndex = i;
+
                         }
                         else
                         {
-                            pActionTree.reset(pAgent);
-
-							if (s == EBTStatus.BT_FAILURE || s == EBTStatus.BT_INVALID)
-							{
-								//THE ACTION failed, to try the next one
-								continue;
-							}
+                            if (s == EBTStatus.BT_FAILURE)
+                            {
+                                //THE ACTION failed, to try the next one
+                                continue;
+                            }
                         }
 
-						Debug.Check(s == EBTStatus.BT_RUNNING || s == EBTStatus.BT_SUCCESS);
+                        Debug.Check(s == EBTStatus.BT_RUNNING || s == EBTStatus.BT_SUCCESS);
 
                         return s;
                     }
                 }
 
-				return EBTStatus.BT_FAILURE;
-            }
-
-            protected override bool isContinueTicking()
-            {
-                return true;
+                return EBTStatus.BT_FAILURE;
             }
         }
     }

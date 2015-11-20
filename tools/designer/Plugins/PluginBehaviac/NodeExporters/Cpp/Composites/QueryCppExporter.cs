@@ -26,7 +26,8 @@ namespace PluginBehaviac.NodeExporters
     {
         protected override bool ShouldGenerateClass(Node node)
         {
-            return true;
+            Query query = node as Query;
+            return (query != null);
         }
 
         protected override void GenerateConstructor(Node node, StreamWriter stream, string indent, string className)
@@ -34,7 +35,8 @@ namespace PluginBehaviac.NodeExporters
             base.GenerateConstructor(node, stream, indent, className);
 
             Query query = node as Query;
-            Debug.Check(query != null);
+            if (query == null)
+                return;
 
             stream.WriteLine("{0}\t\t\tthis->Initialize(\"{1}\", \"{2}\");",
                 indent, query.Domain, DesignerPropertyUtility.RetrieveExportValue(query.Descriptors));
@@ -43,7 +45,8 @@ namespace PluginBehaviac.NodeExporters
         protected override void GenerateMethod(Node node, StreamWriter stream, string indent)
         {
             Query query = node as Query;
-            Debug.Check(query != null);
+            if (query == null)
+                return;
 
             stream.WriteLine("{0}\tpublic:", indent);
 

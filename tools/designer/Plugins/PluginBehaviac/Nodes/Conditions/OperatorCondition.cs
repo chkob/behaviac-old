@@ -18,6 +18,7 @@ using System.Drawing;
 using Behaviac.Design;
 using Behaviac.Design.Nodes;
 using Behaviac.Design.Attributes;
+using Behaviac.Design.Attachments;
 
 namespace PluginBehaviac.Nodes
 {
@@ -27,6 +28,11 @@ namespace PluginBehaviac.Nodes
             : base(label, description)
 		{
 		}
+
+        public override bool IsCondition
+        {
+            get { return true; }
+        }
 
         private readonly static Brush __defaultBackgroundBrush = new SolidBrush(Color.FromArgb(110, 140, 189));
         protected override Brush DefaultBackgroundBrush
@@ -41,5 +47,10 @@ namespace PluginBehaviac.Nodes
 
 			return nvd;
 		}
+
+        public override bool AcceptsAttachment(Type type)
+        {
+            return false;
+        }
 	}
 }

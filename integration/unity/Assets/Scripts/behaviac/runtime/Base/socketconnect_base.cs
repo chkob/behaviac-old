@@ -20,18 +20,15 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.IO;
-using System.ComponentModel;
-using System.Reflection;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
-
 
 namespace behaviac
 {
     public struct Atomic32
     {
         private ulong m_value;
+
         public Atomic32(ulong v)
         {
             m_value = v;
@@ -41,6 +38,7 @@ namespace behaviac
         {
             m_value = v;
         }
+
         public ulong Get()
         {
             return m_value;
@@ -57,12 +55,12 @@ namespace behaviac
             m_value--;
             return m_value;
         }
-
     }
 
     public static class SocketConnection
     {
 #if USING_BEHAVIAC_SEQUENTIAL
+
         public class Seq
         {
             public Seq()
@@ -75,18 +73,21 @@ namespace behaviac
                 ulong v = m_seq.AtomicInc();
                 return v - 1;
             }
+
             public Atomic32 m_seq;
         };
+
 #else
-	struct Seq
-	{
-		behaviac.Atomic32 Next()
-		{
-			return 0;
-		}
-	};
+        struct Seq
+        {
+            behaviac.Atomic32 Next()
+            {
+                return 0;
+            }
+        };
 #endif // USING_BEHAVIAC_SEQUENTIAL
-        static Seq s_seq = new Seq();
+        private static Seq s_seq = new Seq();
+
         public static Seq GetNextSeq()
         {
             return s_seq;
@@ -94,7 +95,7 @@ namespace behaviac
 
         public const int kMaxPacketDataSize = 230;
         public const int kMaxPacketSize = 256;
-        public const int kSocketBufferSize = 16384;
+        public const int kSocketBufferSize = 16384 * 10;
         public const int kGlobalQueueSize = (1024 * 32);
         public const int kLocalQueueSize = (1024 * 8);
 
@@ -118,33 +119,36 @@ namespace behaviac
         }
 
 #if BEHAVIAC_COMPILER_64BITS
-	static UIntPtr ByteSwapAddress(UIntPtr a)
-	{
-		return (UIntPtr)ByteSwap64((ulong)a);
-	}
+        static UIntPtr ByteSwapAddress(UIntPtr a)
+        {
+            return (UIntPtr)ByteSwap64((ulong)a);
+        }
 #endif//#if BEHAVIAC_OS_WIN64
-
     }
 
-    enum CommandId
+    internal enum CommandId
     {
         CMDID_INITIAL_SETTINGS = 1,
-        CMDID_TEXT,
-        CMDID_WORKSPACE
+        CMDID_TEXT
     };
 
     [StructLayout(LayoutKind.Sequential)]
-    struct Text
+    internal struct Text
     {
-        const int kMaxTextLength = 228;
+        private const int kMaxTextLength = 228;
+
         //public string buffer;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = kMaxTextLength + 1)]
-        byte[] buffer;
+        private byte[] buffer;
     };
 
     [StructLayout(LayoutKind.Sequential)]
     public class Packet
     {
+        public Packet()
+        {
+        }
+
         public Packet(byte commandId, ulong seq_)
         {
             this.Init(commandId, seq_);
@@ -158,7 +162,7 @@ namespace behaviac
 #if USING_BEHAVIAC_SEQUENTIAL
             this.seq.Set(seq_);
 #else
-			(void)sizeof(seq_);
+            (void)sizeof(seq_);
 #endif
         }
 
@@ -166,9 +170,16 @@ namespace behaviac
         {
             int packetSize = (0);
 
-            if (command == (byte)CommandId.CMDID_TEXT || command == (byte)CommandId.CMDID_WORKSPACE)
+            if (command == (byte)CommandId.CMDID_TEXT)
             {
-                packetSize = Marshal.SizeOf(typeof(Text));
+                if (this.data != null)
+                {
+                    packetSize = this.data.Length;
+                }
+                else
+                {
+                    packetSize = Marshal.SizeOf(typeof(Text));
+                }
             }
             else
             {
@@ -210,11 +221,11 @@ namespace behaviac
             return messageSize + 1;
         }
 
-        byte messageSize;
-        byte command;
+        private byte messageSize;
+        private byte command;
 
         //[MarshalAs(UnmanagedType.ByValArray, SizeConst = SocketConnection.kMaxPacketDataSize)]
-        byte[] data;
+        private byte[] data;
 
         // IMPORTANT: has to be the last member variable, it's not being sent
         // to tracer application.
@@ -276,18 +287,18 @@ namespace behaviac
             {
                 System.Net.IPEndPoint ipe = new System.Net.IPEndPoint(System.Net.IPAddress.Any, port);
 
-				h.SetSocketOption (SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-				//h.SetSocketOption (SocketOptionLevel.Socket, SocketOptionName.ReceiveTimeout, 1000);
+                h.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+                //h.SetSocketOption (SocketOptionLevel.Socket, SocketOptionName.ReceiveTimeout, 1000);
 
                 h.Bind(ipe);
 
                 h.Listen(maxConnections);
 
                 return true;
+
             }
             catch
             {
-
             }
 
             return false;
@@ -296,6 +307,7 @@ namespace behaviac
         public static bool TestConnection(Socket h)
         {
             bool hasRead = h.Poll(17000, SelectMode.SelectRead);
+
             if (hasRead)
             {
                 return true;
@@ -318,8 +330,8 @@ namespace behaviac
             return null;
         }
 
-        static uint gs_packetsSent = 0;
-        static uint gs_packetsReceived = 0;
+        private static uint gs_packetsSent = 0;
+        private static uint gs_packetsReceived = 0;
 
         public static bool Write(Socket h, byte[] buffer, ref int outBytesWritten)
         {
@@ -340,6 +352,7 @@ namespace behaviac
                 {
                     Close(ref h);
                 }
+
             }
             else
             {
@@ -357,6 +370,7 @@ namespace behaviac
             if (bytesMax == 0 || h == null)
             {
                 return bytesRead;
+
             }
             else if (!h.Connected)
             {
@@ -364,7 +378,7 @@ namespace behaviac
                 return 0;
             }
 
-            bool hasData = h.Poll(100000, SelectMode.SelectRead);
+            bool hasData = h.Poll(1000, SelectMode.SelectRead);
 
             if (hasData)
             {
@@ -380,6 +394,7 @@ namespace behaviac
                 if (res == -1)
                 {
                     Close(ref h);
+
                 }
                 else
                 {
@@ -402,15 +417,15 @@ namespace behaviac
         {
             return gs_packetsReceived;
         }
-
     }// namespace Socket
 
-    enum Platform
+    internal enum Platform
     {
         WINDOWS
     };
 
 #if USING_BEHAVIAC_SEQUENTIAL
+
     public class PacketCollection
     {
         public PacketCollection()
@@ -419,6 +434,7 @@ namespace behaviac
             m_packetsEnd = (0);
             m_packetsCapacity = (0);
         }
+
         ~PacketCollection()
         {
             Close();
@@ -431,6 +447,7 @@ namespace behaviac
             m_packetsEnd = 0;
             m_packetsCapacity = capacity;
         }
+
         public void Close()
         {
             m_packets = null;
@@ -464,15 +481,17 @@ namespace behaviac
         {
             m_packetsEnd = 0;
         }
+
         public void Sort()
         {
             PacketComparer c = new PacketComparer();
             Array.Sort(m_packets, 0, this.m_packetsEnd, c);
         }
 
-        class PacketComparer : IComparer<Packet>
+        private class PacketComparer : IComparer<Packet>
         {
 #if USING_BEHAVIAC_SEQUENTIAL
+
             public int Compare(Packet pa, Packet pb)
             {
                 if (pa.seq.Get() < pb.seq.Get())
@@ -487,6 +506,7 @@ namespace behaviac
 
                 return 0;
             }
+
 #else
             int Compare(Packet pa, Packet pb)
             {
@@ -499,43 +519,54 @@ namespace behaviac
         private int m_packetsEnd;
         private int m_packetsCapacity;
     };
+
 #else
-	struct PacketCollection
-	{
-		void Init(uint) {}
-		void Close() {}
-		uint GetMemoryOverhead()
-		{
-			return 0;
-		}
-	};
+    struct PacketCollection
+    {
+        void Init(uint) {}
+        void Close() {}
+        uint GetMemoryOverhead()
+        {
+            return 0;
+        }
+    };
 #endif // #if USING_BEHAVIAC_SEQUENTIAL
 
     public class PacketBuffer
     {
-        public PacketBuffer()
+        private ConnectorInterface _conector;
+
+        public PacketBuffer(ConnectorInterface c)
         {
+            _conector = c;
             m_free = true;
         }
 
         public void AddPacket(Packet packet)
         {
-			if (packet != null) 
-			{
-				// Spin loop until there is a place for new packet.
-				// If this happens to often, it means we are producing packets
-				// quicker than consuming them, increasing max # of packets in buffer
-				// could help.
-				while (m_packetQueue.Count >= SocketConnection.kLocalQueueSize) {
-						//BEHAVIAC_LOGINFO("packet buffer is full... buffer size: %d\n", MAX_PACKETS_IN_BUFFER);
-						System.Threading.Thread.Sleep (1);
-				}
+            if (packet != null)
+            {
+                // Spin loop until there is a place for new packet.
+                // If this happens to often, it means we are producing packets
+                // quicker than consuming them, increasing max # of packets in buffer
+                // could help.
+                while (m_packetQueue.Count >= SocketConnection.kLocalQueueSize)
+                {
+                    //BEHAVIAC_LOGINFO("packet buffer is full... buffer size: %d\n", MAX_PACKETS_IN_BUFFER);
+                    System.Threading.Thread.Sleep(1);
 
-				m_packetQueue.Enqueue (packet);
-			}
+                    if (this._conector.WriteSocket == null || !this._conector.WriteSocket.Connected)
+                    {
+                        break;
+                    }
+                }
+
+                m_packetQueue.Enqueue(packet);
+            }
         }
 
 #if USING_BEHAVIAC_SEQUENTIAL
+
         public bool CollectPackets(PacketCollection coll)
         {
             if (m_packetQueue.Count == 0)
@@ -545,24 +576,29 @@ namespace behaviac
 
             Packet packet = m_packetQueue.Peek();
 
-			while (packet == null) 
-			{
-				m_packetQueue.Dequeue();
-				if (m_packetQueue.Count == 0)
-				{
-					break;
-				}
+            while (packet == null)
+            {
+                m_packetQueue.Dequeue();
 
-				packet = m_packetQueue.Peek();
-			}
+                if (m_packetQueue.Count == 0)
+                {
+                    break;
+                }
+
+                packet = m_packetQueue.Peek();
+            }
 
             while (packet != null)
             {
                 if (coll.Add(packet))
                 {
                     m_packetQueue.Dequeue();
+
                     if (m_packetQueue.Count == 0)
+                    {
                         break;
+                    }
+
                     packet = m_packetQueue.Peek();
                 }
                 else
@@ -573,8 +609,10 @@ namespace behaviac
 
             return true;
         }
+
 #endif
-        void SendPackets(Socket h)
+
+        private void SendPackets(Socket h)
         {
             Packet packet = m_packetQueue.Peek();
 
@@ -597,6 +635,11 @@ namespace behaviac
             }
         }
 
+        public void Clear()
+        {
+            m_packetQueue.Clear();
+        }
+
         public bool m_free;
 
         private Queue<Packet> m_packetQueue = new Queue<Packet>();
@@ -613,7 +656,6 @@ namespace behaviac
         private readonly object locker;
         private readonly Queue<T> queue;
         private int count;
-
 
         /// <summary>
         /// Initializes a new instance of the ObjectPool class.
@@ -632,14 +674,13 @@ namespace behaviac
             queue = new Queue<T>();
         }
 
-
         /// <summary>
-        /// Retrieves an item from the pool. 
+        /// Retrieves an item from the pool.
         /// </summary>
         /// <returns>The item retrieved from the pool.</returns>
         public T Get()
         {
-            lock (locker)
+            lock(locker)
             {
                 if (queue.Count > 0)
                 {
@@ -657,15 +698,16 @@ namespace behaviac
         /// <param name="item">The item to place to the pool.</param>
         public void Put(T item)
         {
-            lock (locker)
+            lock(locker)
             {
                 if (count < size)
                 {
                     queue.Enqueue(item);
+
                 }
                 else
                 {
-                    using (item as IDisposable)
+                    using(item as IDisposable)
                     {
                         count--;
                     }
@@ -678,14 +720,14 @@ namespace behaviac
         /// </summary>
         public void Dispose()
         {
-            lock (locker)
+            lock(locker)
             {
                 count = 0;
+
                 while (queue.Count > 0)
                 {
-                    using (queue.Dequeue() as IDisposable)
+                    using(queue.Dequeue() as IDisposable)
                     {
-
                     }
                 }
             }
@@ -695,7 +737,8 @@ namespace behaviac
     public class CustomObjectPool : IEnumerable
     {
         private readonly int m_capacity;
-        class PacketSegment
+
+        private class PacketSegment
         {
             public int m_count;
             public Packet[] m_buffer;
@@ -703,7 +746,7 @@ namespace behaviac
             public PacketSegment m_next;
         }
 
-        PacketSegment m_segments;
+        private PacketSegment m_segments;
 
         public CustomObjectPool(int objectCountPerSegment)
         {
@@ -727,14 +770,14 @@ namespace behaviac
 
         public Packet Allocate()
         {
-            Debug.Check(m_segments != null);
-
-            if (m_segments == null || m_segments.m_count == m_capacity)
+            if (m_segments == null || m_segments.m_count >= m_capacity)
             {
                 AllocSegment();
             }
 
-            return m_segments.m_buffer[m_segments.m_count++];
+            Packet p = m_segments.m_buffer[m_segments.m_count++];
+
+            return p;
         }
 
         private void AllocSegment()
@@ -742,14 +785,18 @@ namespace behaviac
             PacketSegment n = new PacketSegment();
             n.m_count = 0;
             n.m_buffer = new Packet[m_capacity];
+
+            for (int i = 0; i < m_capacity; ++i)
+            {
+                n.m_buffer[i] = new Packet();
+            }
+
             if (m_segments != null)
             {
                 m_segments.m_next = n;
             }
-            else
-            {
-                m_segments = n;
-            }
+
+            m_segments = n;
         }
 
         public void Clear()
@@ -774,7 +821,7 @@ namespace behaviac
 
     public abstract class ConnectorInterface
     {
-        const int kMaxTextLength = 228;
+        private const int kMaxTextLength = 228;
 
         public ConnectorInterface()
         {
@@ -782,7 +829,7 @@ namespace behaviac
             Debug.Check(Marshal.SizeOf(typeof(Packet)) < SocketConnection.kMaxPacketSize);
 
 #if !USING_BEHAVIAC_SEQUENTIAL
-    Debug.Check(sizeof(Packet) == sizeof(AllocInfo) + 2);
+            Debug.Check(sizeof(Packet) == sizeof(AllocInfo) + 2);
 #endif
 
 #if USING_BEHAVIAC_SEQUENTIAL
@@ -806,14 +853,14 @@ namespace behaviac
             m_packetsCount = 0;
             s_tracerThread = null;
             m_bHandleMessage = true;
-
         }
+
         ~ConnectorInterface()
         {
             this.Close();
         }
 
-        void RecordText(string text)
+        private void RecordText(string text)
         {
             if (this.m_packetPool != null)
             {
@@ -829,7 +876,7 @@ namespace behaviac
             }
         }
 
-        void CreateAndStartThread()
+        private void CreateAndStartThread()
         {
             s_tracerThread = new System.Threading.Thread(MemTracer_ThreadFunc);
             s_tracerThread.Start();
@@ -840,12 +887,12 @@ namespace behaviac
             return m_isConnected.Get() != 0;
         }
 
-        bool IsDisconnected()
+        private bool IsDisconnected()
         {
             return m_isDisconnected.Get() != 0;
         }
 
-        bool IsConnectedFinished()
+        private bool IsConnectedFinished()
         {
             return m_isConnectedFinished.Get() != 0;
         }
@@ -855,26 +902,16 @@ namespace behaviac
             return m_isInited.Get() != 0;
         }
 
-        void SetConnectPort(ushort port)
+        private void SetConnectPort(ushort port)
         {
             this.m_port = port;
         }
 
-        void AddPacket(Packet packet, bool bReserve)
+        private void AddPacket(Packet packet, bool bReserve)
         {
-            if (this.IsConnected())
+            if (this.IsConnected() && this.m_writeSocket != null && this.m_writeSocket.Connected)
             {
-                Debug.Check(t_packetBufferIndex != -1);
-                int bufferIndex = (int)t_packetBufferIndex;
-                //WHEN bReserve is false, it is unsafe to allocate memory as other threads might be allocating
-                //you can avoid the following assert to malloc a block of memory in your thread at the very beginning
-                Debug.Check(bufferIndex > 0 || bReserve);
-
-                //bufferIndex initially is 0
-                if (bufferIndex == 0 && bReserve)
-                {
-                    bufferIndex = ReserveThreadPacketBuffer();
-                }
+                int bufferIndex = this.GetBufferIndex(bReserve);
 
                 if (bufferIndex > 0)
                 {
@@ -882,60 +919,93 @@ namespace behaviac
 
                     this.m_packetsCount++;
                 }
+                else
+                {
+                    //Debug.Check(false);
+                    Debug.LogError("invalid bufferIndex");
+                }
             }
         }
 
+        private int GetBufferIndex(bool bReserve)
+        {
+            //Debug.Check(t_packetBufferIndex != -1);
+            int bufferIndex = (int)t_packetBufferIndex;
+            //WHEN bReserve is false, it is unsafe to allocate memory as other threads might be allocating
+            //you can avoid the following assert to malloc a block of memory in your thread at the very beginning
+            Debug.Check(bufferIndex > 0 || bReserve);
+
+            //bufferIndex initially is 0
+            if (bufferIndex <= 0 && bReserve)
+            {
+                bufferIndex = ReserveThreadPacketBuffer();
+            }
+
+            return bufferIndex;
+        }
+
         protected abstract void OnConnection();
+
         protected virtual void OnRecieveMessages(string msgs)
         {
         }
 
         protected void SendAllPackets()
         {
-            for (int i = 0; i < m_maxTracedThreads; ++i)
+            if (this.m_writeSocket != null && this.m_writeSocket.Connected)
             {
-                if (m_packetBuffers[i] != null && !m_packetBuffers[i].m_free)
+                for (int i = 0; i < m_maxTracedThreads; ++i)
                 {
+                    if (m_packetBuffers[i] != null && !m_packetBuffers[i].m_free)
+                    {
 #if USING_BEHAVIAC_SEQUENTIAL
 
-                    if (!m_packetBuffers[i].CollectPackets(m_packetCollection))
+                        if (!m_packetBuffers[i].CollectPackets(m_packetCollection))
+                        {
+                            break;
+                        }
+
+#else
+                    m_packetBuffers[i].SendPackets(m_writeSocket);
+#endif
+                    }
+                }
+
+#if USING_BEHAVIAC_SEQUENTIAL
+                // TODO: Deal with Socket.Write failures.
+                // (right now packet is lost).
+                m_packetCollection.Sort();
+
+                int endIndex = 0;
+                Packet[] packets = m_packetCollection.GetPackets(ref endIndex);
+
+                for (int i = 0; i < endIndex; ++i)
+                {
+                    Packet p = packets[i];
+
+                    int bytesWritten = (0);
+                    SocketBase.Write(this.m_writeSocket, p.GetData(), ref bytesWritten);
+
+                    if (this.m_writeSocket == null || !this.m_writeSocket.Connected || bytesWritten <= 0)
                     {
                         break;
                     }
-
-#else
-				m_packetBuffers[i].SendPackets(m_writeSocket);
-#endif
                 }
-            }
 
-#if USING_BEHAVIAC_SEQUENTIAL
-            // TODO: Deal with Socket.Write failures.
-            // (right now packet is lost).
-            m_packetCollection.Sort();
-
-            int endIndex = 0;
-            Packet[] packets = m_packetCollection.GetPackets(ref endIndex);
-
-            for (int i = 0; i < endIndex; ++i)
-            {
-                Packet p = packets[i];
-
-                int bytesWritten = (0);
-                SocketBase.Write(m_writeSocket, p.GetData(), ref bytesWritten);
-            }
-
-            m_packetCollection.Reset();
+                m_packetCollection.Reset();
 #endif
-            this.m_packetsCount = 0;
+                this.m_packetsCount = 0;
+            }
         }
 
         private static string GetStringFromBuffer(byte[] data, int dataIdx, int maxLen, bool isAsc)
         {
             System.Text.Encoding ecode;
+
             if (isAsc)
             {
                 ecode = new System.Text.ASCIIEncoding();
+
             }
             else
             {
@@ -951,134 +1021,176 @@ namespace behaviac
         /**
         return true if 'msgCheck' is received
         */
+
         protected bool ReceivePackets(string msgCheck)
         {
-            int kBufferLen = 2048;
-            byte[] buffer = new byte[kBufferLen];
-
-            bool found = false;
-            int reads = SocketBase.Read(ref m_writeSocket, buffer, kBufferLen);
-            while (reads > 0)
+            if (this.m_writeSocket != null && this.m_writeSocket.Connected)
             {
-                //BEHAVIAC_LOG(MEMDIC_LOG_INFO, buffer);
+                int kBufferLen = 2048;
+                byte[] buffer = new byte[kBufferLen];
 
-                lock (this)
+                bool found = false;
+                int reads = SocketBase.Read(ref m_writeSocket, buffer, kBufferLen);
+
+                while (reads > 0 && this.m_writeSocket != null && this.m_writeSocket.Connected)
                 {
-                    ms_texts += GetStringFromBuffer(buffer, 0, reads, true);
+                    //BEHAVIAC_LOG(MEMDIC_LOG_INFO, buffer);
+
+                    lock (this)
+                    {
+                        ms_texts += GetStringFromBuffer(buffer, 0, reads, true);
+                    }
+
+                    if (!string.IsNullOrEmpty(msgCheck) && ms_texts.IndexOf(msgCheck) != -1)
+                    {
+                        found = true;
+                    }
+
+                    reads = SocketBase.Read(ref m_writeSocket, buffer, kBufferLen);
                 }
 
-                if (!string.IsNullOrEmpty(msgCheck) && ms_texts.IndexOf(msgCheck) != -1)
+                if (this.m_bHandleMessage && this.m_writeSocket != null && this.m_writeSocket.Connected)
                 {
-                    found = true;
+                    string msgs = "";
+
+                    if (this.ReadText(ref msgs))
+                    {
+                        this.OnRecieveMessages(msgs);
+
+                        return true;
+                    }
                 }
 
-                reads = SocketBase.Read(ref m_writeSocket, buffer, kBufferLen);
+                return found;
             }
 
-            if (this.m_bHandleMessage)
-            {
-                string msgs = "";
-
-                if (this.ReadText(ref msgs))
-                {
-                    this.OnRecieveMessages(msgs);
-
-                    return true;
-                }
-            }
-
-            return found;
+            return false;
         }
 
-        void ThreadFunc()
+        private void ThreadFunc()
         {
             Log("behaviac: Socket Thread Starting\n");
-            Debug.Check(t_packetBufferIndex != -1);
-
-            bool blockingSocket = true;
-            Socket serverSocket = null;
+            try
             {
-                serverSocket = SocketBase.Create(blockingSocket);
+                this.ReserveThreadPacketBuffer();
+                int bufferIndex = t_packetBufferIndex;
+                Debug.Check(bufferIndex > 0);
 
-                if (serverSocket == null)
+                bool blockingSocket = true;
+                Socket serverSocket = null;
+                try
                 {
-                    Log("behaviac: Couldn't create server socket.\n");
-                    return;
+                    serverSocket = SocketBase.Create(blockingSocket);
+
+                    if (serverSocket == null)
+                    {
+                        Log("behaviac: Couldn't create server socket.\n");
+                        return;
+                    }
+
+                    string bufferTemp = string.Format("behaviac: Listening at port {0}...\n", m_port);
+                    Log(bufferTemp);
+
+                    // max connections: 1, don't allow multiple clients?
+                    if (!SocketBase.Listen(serverSocket, m_port, 1))
+                    {
+                        Log("behaviac: Couldn't configure server socket.\n");
+                        SocketBase.Close(ref serverSocket);
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError(ex.Message);
                 }
 
-                string bufferTemp = string.Format("behaviac: Listening at port {0}...\n", m_port);
-                Log(bufferTemp);
-
-                // max connections: 1, don't allow multiple clients?
-                if (!SocketBase.Listen(serverSocket, m_port, 1))
-                {
-                    Log("behaviac: Couldn't configure server socket.\n");
-                    SocketBase.Close(ref serverSocket);
-                    return;
-                }
-            }
-
-            while (m_terminating.Get() == 0)
-            {
-                //wait for connecting
                 while (m_terminating.Get() == 0)
                 {
-                    if (SocketBase.TestConnection(serverSocket))
+                    //wait for connecting
+                    while (m_terminating.Get() == 0)
                     {
-                        break;
+                        if (SocketBase.TestConnection(serverSocket))
+                        {
+                            break;
+                        }
+
+                        System.Threading.Thread.Sleep(100);
                     }
 
-                    System.Threading.Thread.Sleep(100);
-                }
-
-                if (m_terminating.Get() == 0)
-                {
-                    Log("behaviac: accepting...\n");
+                    if (m_terminating.Get() == 0)
                     {
-                        m_writeSocket = SocketBase.Accept(serverSocket, SocketConnection.kSocketBufferSize);
-
-                        if (m_writeSocket == null)
+                        Log("behaviac: accepting...\n");
+                        try
                         {
-                            Log("behaviac: Couldn't create write socket.\n");
-                            SocketBase.Close(ref serverSocket);
-                            return;
+                            m_writeSocket = SocketBase.Accept(serverSocket, SocketConnection.kSocketBufferSize);
+
+                            if (m_writeSocket == null)
+                            {
+                                Log("behaviac: Couldn't create write socket.\n");
+                                SocketBase.Close(ref serverSocket);
+                                return;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError(ex.Message);
+                        }
+
+                        try
+                        {
+                            m_isConnected.AtomicInc();
+                            System.Threading.Thread.Sleep(1);
+
+                            OnConnection();
+
+                            m_isConnectedFinished.AtomicInc();
+                            System.Threading.Thread.Sleep(1);
+
+                            //this.OnConnectionFinished();
+
+                            Log("behaviac: Connected. accepted\n");
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError(ex.Message);
+                        }
+
+                        try
+                        {
+                            while (m_terminating.Get() == 0 && this.m_writeSocket != null)
+                            {
+                                System.Threading.Thread.Sleep(1);
+
+                                this.SendAllPackets();
+                                this.ReceivePackets("");
+                            }
+
+                            if (this.m_writeSocket != null && this.m_writeSocket.Connected)
+                            {
+                                // One last time, to send any outstanding packets out there.
+                                this.SendAllPackets();
+                            }
+
+                            SocketBase.Close(ref this.m_writeSocket);
+                            this.Clear();
+
+                            Log("behaviac: disconnected. \n");
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError(ex.Message);
                         }
                     }
+                }//while (!m_terminating)
 
-                    {
-                        m_isConnected.AtomicInc();
-                        System.Threading.Thread.Sleep(1);
+                SocketBase.Close(ref serverSocket);
 
-                        OnConnection();
-
-                        m_isConnectedFinished.AtomicInc();
-                        System.Threading.Thread.Sleep(1);
-
-                        //this.OnConnectionFinished();
-
-                        Log("behaviac: Connected. accepted\n");
-                    }
-
-                    while (m_terminating.Get() == 0 && m_writeSocket != null)
-                    {
-                        System.Threading.Thread.Sleep(1);
-                        SendAllPackets();
-
-                        ReceivePackets("");
-                    }
-
-                    // One last time, to send any outstanding packets out there.
-                    SendAllPackets();
-                    SocketBase.Close(ref m_writeSocket);
-                    this.Clear();
-
-                    Log("behaviac: disconnected. \n");
-                }
-            }//while (!m_terminating)
-
-            SocketBase.Close(ref serverSocket);
-
-            this.Clear();
+                this.Clear();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError(ex.Message);
+            }
 
             Log("behaviac: ThreadFunc exited. \n");
         }
@@ -1109,10 +1221,16 @@ namespace behaviac
 
             return numTrackedThreads;
         }
+
         public int GetPacketsCount()
         {
             //not thread safe
-            return m_packetsCount;
+            if (this.IsConnected())
+            {
+                return m_packetsCount;
+            }
+
+            return 0;
         }
 
         public void SendText(string text, byte commandId /*= (byte)CommandId.CMDID_TEXT*/)
@@ -1125,13 +1243,18 @@ namespace behaviac
                 this.AddPacket(packet, true);
                 gs_packetsStats.texts++;
             }
+
+            //else
+            //{
+            //    RecordText(text);
+            //}
         }
 
         public bool ReadText(ref string text)
         {
             if (this.IsConnected())
             {
-                lock (this)
+                lock(this)
                 {
                     text = this.ms_texts;
                     this.ms_texts = string.Empty;
@@ -1143,7 +1266,6 @@ namespace behaviac
             return false;
         }
 
-
         protected int ReserveThreadPacketBuffer()
         {
             int bufferIndex = t_packetBufferIndex;
@@ -1151,11 +1273,11 @@ namespace behaviac
             //BEHAVIAC_LOGINFO("ReserveThreadPacketBuffer:%d thread %d\n", bufferIndex, id);
 
             //bufferIndex initially is -1
-            if (bufferIndex == -1)
+            if (bufferIndex <= 0)
             {
                 int retIndex = (-2);
 
-                lock (this)
+                lock(this)
                 {
                     // NOTE: This is quite naive attempt to make sure that main thread queue
                     // is the last one (rely on the fact that it's most likely to be the first
@@ -1166,7 +1288,7 @@ namespace behaviac
                     {
                         if (m_packetBuffers[i] == null)
                         {
-                            m_packetBuffers[i] = new PacketBuffer();
+                            m_packetBuffers[i] = new PacketBuffer(this);
                         }
 
                         if (m_packetBuffers[i] != null)
@@ -1210,6 +1332,25 @@ namespace behaviac
             this.m_isConnectedFinished.Set(0);
             this.m_terminating.Set(0);
 
+            if (this.m_packetBuffers != null)
+            {
+                int bufferIndex = this.GetBufferIndex(false);
+                if (bufferIndex > 0)
+                {
+                    this.m_packetBuffers[bufferIndex].Clear();
+                }
+            }
+
+            if (this.m_packetPool != null)
+            {
+                this.m_packetPool.Clear();
+            }
+
+            if (this.m_packetBuffers != null)
+            {
+                this.m_packetCollection.Reset();
+            }
+
             this.m_packetsCount = 0;
         }
 
@@ -1217,7 +1358,7 @@ namespace behaviac
         {
             int packetsCount = 0;
 
-            foreach (Packet p in this.m_packetPool)
+            foreach(Packet p in this.m_packetPool)
             {
                 int bytesWritten = (0);
                 SocketBase.Write(m_writeSocket, p.GetData(), ref bytesWritten);
@@ -1250,12 +1391,12 @@ namespace behaviac
             public int init;
         };
 
-        System.Threading.Thread s_tracerThread;
+        private System.Threading.Thread s_tracerThread;
         protected string ms_texts;
         protected volatile bool m_bHandleMessage;
         protected PacketsStats gs_packetsStats;
 
-        //[ThreadStatic]
+        [ThreadStatic]
         protected static int t_packetBufferIndex = -1;
 
         public bool Init(int maxTracedThreads, ushort port, bool bBlocking)
@@ -1278,6 +1419,8 @@ namespace behaviac
 
             {
                 behaviac.Debug.Log("behaviac: ConnectorInterface.Init Enter\n");
+                string portMsg = string.Format("behaviac: listing at port {0}\n", port);
+                behaviac.Debug.Log(portMsg);
 
                 this.ReserveThreadPacketBuffer();
                 this.SetConnectPort(port);
@@ -1288,6 +1431,8 @@ namespace behaviac
 
                 if (bBlocking)
                 {
+                    Debug.LogWarning("behaviac: SetupConnection is blocked, please Choose 'Connect' in the Designer to continue");
+
                     while (!this.IsConnected() || !this.IsConnectedFinished())
                     {
                         // Wait for connection
@@ -1329,7 +1474,7 @@ namespace behaviac
                     }
                 }
 
-                lock (this)
+                lock(this)
                 {
                     m_packetBuffers = null;
                 }
@@ -1352,9 +1497,15 @@ namespace behaviac
             t_packetBufferIndex = -1;
             SocketBase.ShutdownSockets();
 
-            LogManager.Close();
-
             m_isInited.AtomicDec();
+        }
+
+        public Socket WriteSocket
+        {
+            get
+            {
+                return m_writeSocket;
+            }
         }
 
         private void MemTracer_ThreadFunc(object tracer_)
@@ -1362,9 +1513,7 @@ namespace behaviac
             //ConnectorInterface tracer = (ConnectorInterface)tracer_;
             this.ThreadFunc();
         }
-
     }
-
-
 }
+
 #endif

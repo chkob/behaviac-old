@@ -78,6 +78,8 @@ namespace PluginBehaviac.Nodes
             Wait dec = (Wait)newnode;
             if (_time != null)
                 dec._time = (VariableDef)_time.Clone();
+
+            dec._ignoreTimeScale = this._ignoreTimeScale;
         }
 
         private readonly static Brush __defaultBackgroundBrush = new SolidBrush(Color.FromArgb(157, 75, 39));
@@ -111,6 +113,20 @@ namespace PluginBehaviac.Nodes
             }
 
             base.CheckForErrors(rootBehavior, result);
+        }
+
+        public override bool ResetMembers(bool check, AgentType agentType, bool clear, MethodDef method = null, PropertyDef property = null)
+        {
+            bool bReset = false;
+
+            if (this._time != null)
+            {
+                bReset |= this._time.ResetMembers(check, agentType, clear, property);
+            }
+
+            bReset |= base.ResetMembers(check, agentType, clear, method, property);
+
+            return bReset;
         }
 	}
 }
