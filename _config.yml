@@ -7,8 +7,8 @@ gauges_id: 503c5af6613f5d0f19000027
 google_analytics_id: UA-50755011-1
 
 repository: https://github.com/pjkui/behaviac
+baseurl: http://pjkui.github.io/behaviac/
 help_url: https://github.com/pjkui/behaviac
-
 collections:
   docs:
     output: true
