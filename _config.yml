@@ -15,7 +15,7 @@ collections:
 
 name: behaviac • Simple, Game AI, offical websiste
 description: Transform your plain text into static websites and blogs
-url: http://pjkui.github.io/behaviac
+url: http://pjkui.github.io/behaviac/
 
 gems:
   - jekyll-feed
